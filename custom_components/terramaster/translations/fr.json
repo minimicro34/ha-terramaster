@@ -1,0 +1,30 @@
+{
+  "title": "TerraMaster TOS",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connexion à TerraMaster",
+        "description": "SSH doit être activé dans TOS. La clé du serveur est enregistrée à la première connexion, puis vérifiée à chaque connexion suivante.",
+        "data": {"host": "Hôte", "port": "Port SSH", "username": "Nom d’utilisateur", "password": "Mot de passe"}
+      },
+      "reauth_confirm": {
+        "title": "Réauthentifier TerraMaster",
+        "description": "Saisissez des identifiants SSH valides. Continuer approuve également la clé SSH actuelle du NAS.",
+        "data": {"username": "Nom d’utilisateur", "password": "Mot de passe"}
+      }
+    },
+    "error": {"cannot_connect": "Échec de la connexion", "invalid_auth": "Authentification incorrecte", "unknown": "Erreur inattendue"},
+    "abort": {"already_configured": "Ce TerraMaster est déjà configuré", "reauth_successful": "La réauthentification a réussi"}
+  },
+  "entity": {
+    "sensor": {
+      "model": {"name": "Modèle"},
+      "tos_version": {"name": "Version de TOS"},
+      "uptime": {"name": "Durée de fonctionnement"},
+      "cpu_usage": {"name": "Utilisation du processeur"},
+      "memory_usage": {"name": "Utilisation de la mémoire"},
+      "temperature": {"name": "Température"},
+      "disk_usage": {"name": "Utilisation des disques"}
+    }
+  }
+}
