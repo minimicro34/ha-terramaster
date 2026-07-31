@@ -36,10 +36,11 @@ TOS 4. It connects over SSH with `asyncssh`; the default TerraMaster SSH port is
 - Per-interface link state, negotiated speed, transferred data in GB and live traffic
   rates in Mbit/s
 - TOS shared folders as entities on the main NAS device, with path, backing device,
-  type, visibility and recycle-bin details; connection URLs are exposed only for the
-  SMB/CIFS, NFS and AFP protocols currently available on each folder. The main NAS
-  device's native **Open device webpage** action opens an authenticated page listing
-  all available shared-folder connections
+  type, visibility, recycle-bin, volume, RAID, filesystem and space details;
+  connection actions are exposed only for the SMB/CIFS, NFS and AFP protocols
+  currently available on each folder. The main NAS device's native **Open device
+  webpage** action opens an authenticated, mobile-friendly page listing every folder
+  and its available connection buttons
 - SSH, Telnet and SNMP runtime status with listening protocol and port attributes
 
 The commercial model is read with TOS's privileged `getmodel` utility. The
@@ -50,6 +51,10 @@ depends on the sensors exposed by a particular TOS build.
 When TOS does not expose a metric, its entity remains unavailable without preventing
 other sensors from updating. CPU usage becomes available after the second refresh,
 because aggregate and per-core usage are calculated from two `/proc/stat` samples.
+
+NFS must be enabled both as a TOS file service and as an access rule on the individual
+shared folder. The integration checks the running NFS server and the active exports;
+enabling only the global NFS service does not expose every folder through NFS.
 
 ## Installation with HACS
 

@@ -224,6 +224,11 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
             attributes = share_entity.extra_state_attributes
         assert attributes["smb_url"] == "smb://nas.local/public"
         assert attributes["nfs_url"] == "nfs://nas.local/mnt/md0/public"
+        assert attributes["volume"] == "vg0-lv0"
+        assert attributes["filesystem"] == "btrfs"
+        assert attributes["available_bytes"] == 536612429824
+        assert attributes["raid"] == "md0"
+        assert attributes["raid_level"] == "raid1"
         assert attributes["open_share"].startswith(
             "https://ha.example/api/terramaster/share?"
         )

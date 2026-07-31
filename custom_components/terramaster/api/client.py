@@ -245,6 +245,34 @@ nfs_exports_path() {
     ' "$1" 2>/dev/null
 }
 
+nfs_server_running() {
+    for process in rpc.mountd rpc.nfsd mountd nfsd; do
+        pidof "$process" >/dev/null 2>&1 && return 0
+    done
+    [ -r /proc/fs/nfsd/versions ] && \
+        grep -Eq '\+[234](\.|[[:space:]]|$)' /proc/fs/nfsd/versions 2>/dev/null
+}
+
+nfs_share_exported() {
+    target=$1
+    for exports_file in /etc/exports /var/lib/nfs/etab /etc/exports.d/*; do
+        [ -r "$exports_file" ] || continue
+        nfs_exports_path "$exports_file" "$target" && return 0
+    done
+    if command -v exportfs >/dev/null 2>&1; then
+        exportfs -v 2>/dev/null | awk -v target="$target" '
+            /^[[:space:]]*\/[^[:space:]]*/ {
+                path=$1
+                gsub(/\\040/, " ", path)
+                if (path == target) found=1
+            }
+            END {exit found ? 0 : 1}
+        '
+        return $?
+    fi
+    return 1
+}
+
 if command -v sqlite3 >/dev/null 2>&1 && [ -r /etc/base/nasdb ]; then
     sqlite3 -separator '|' /etc/base/nasdb \
         'SELECT foldername,mntpath,device,type,hidden,recycle FROM share;' \
@@ -255,8 +283,7 @@ if command -v sqlite3 >/dev/null 2>&1 && [ -r /etc/base/nasdb ]; then
             ini_has_section /etc/samba/smb.conf "$share_name"; then
             share_protocols='smb'
         fi
-        if pidof rpc.mountd >/dev/null 2>&1 && [ -r /etc/exports ] && \
-            nfs_exports_path /etc/exports "$share_path"; then
+        if nfs_server_running && nfs_share_exported "$share_path"; then
             [ -n "$share_protocols" ] && share_protocols="$share_protocols,nfs" || \
                 share_protocols='nfs'
         fi
