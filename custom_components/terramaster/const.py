@@ -12,5 +12,6 @@ DEFAULT_PORT: Final = 9222
 DEFAULT_SCAN_INTERVAL: Final = timedelta(seconds=60)
 
 CONF_HOST_KEY: Final = "host_key"
+CONF_SHARE_TOKEN: Final = "share_token"
 
 PLATFORMS: Final = ["sensor"]
