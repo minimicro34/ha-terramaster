@@ -36,6 +36,9 @@ def test_share_urls() -> None:
     assert share_page_url("https://ha.example/", "entry 1", "My share") == (
         "https://ha.example/api/terramaster/share?entry_id=entry+1&share=My+share"
     )
+    assert share_page_url("https://ha.example/", "entry 1") == (
+        "https://ha.example/api/terramaster/share?entry_id=entry+1"
+    )
 
 
 async def test_share_view() -> None:
@@ -48,7 +51,7 @@ async def test_share_view() -> None:
     )
     request = make_mocked_request(
         "GET",
-        "/api/terramaster/share?entry_id=entry-1&share=My+share",
+        "/api/terramaster/share?entry_id=entry-1",
     )
 
     response = await TerraMasterShareView(hass).get(request)
@@ -57,4 +60,6 @@ async def test_share_view() -> None:
     assert 'href="smb://nas.local/My%20share"' in response.text
     assert 'href="nfs://nas.local/mnt/md0/My%20share"' in response.text
     assert "afp://" not in response.text
+    assert "My share" in response.text
+    assert "/mnt/md0/My share" in response.text
     assert response.headers["X-Content-Type-Options"] == "nosniff"

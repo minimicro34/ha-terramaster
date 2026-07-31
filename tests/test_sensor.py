@@ -160,7 +160,11 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
     )
 
     try:
-        await async_setup_entry(hass, entry, entities.extend)
+        with patch(
+            "custom_components.terramaster.sensor.get_url",
+            return_value="https://ha.example",
+        ):
+            await async_setup_entry(hass, entry, entities.extend)
 
         migrated_uptime = registry.async_get(uptime_registry_entry.entity_id)
         assert migrated_uptime is not None
@@ -209,6 +213,9 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
             and entity.unique_id.endswith("share_public")
         )
         assert share_entity.device_info["name"] == "NAS-NICO"
+        assert share_entity.device_info["configuration_url"] == (
+            f"https://ha.example/api/terramaster/share?entry_id={entry.entry_id}"
+        )
         assert share_entity.native_value == "/mnt/md0/public"
         with patch(
             "custom_components.terramaster.sensor.get_url",
