@@ -6,7 +6,7 @@ import asyncio
 import logging
 import shlex
 import time
-from typing import Any, cast
+from typing import Any
 
 import asyncssh
 
@@ -157,7 +157,7 @@ class TerraMasterApiClient:
                 raise TerraMasterHostKeyError(
                     "The SSH server did not provide a host key"
                 )
-            return cast("bytes", key.export_public_key()).decode().strip()
+            return _to_text(key.export_public_key()).strip()
         finally:
             connection.close()
             await connection.wait_closed()
