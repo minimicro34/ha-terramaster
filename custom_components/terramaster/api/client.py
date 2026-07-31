@@ -153,6 +153,10 @@ class TerraMasterApiClient:
         connection = await self._async_connect(trust_on_first_use=True)
         try:
             key = connection.get_server_host_key()
+            if key is None:
+                raise TerraMasterHostKeyError(
+                    "The SSH server did not provide a host key"
+                )
             return cast("bytes", key.export_public_key()).decode().strip()
         finally:
             connection.close()
@@ -172,10 +176,11 @@ class TerraMasterApiClient:
 
             if result.exit_status != 0:
                 raise TerraMasterCommandError(
-                    result.stderr.strip() or f"Command exited with {result.exit_status}"
+                    _to_text(result.stderr).strip()
+                    or f"Command exited with {result.exit_status}"
                 )
 
-            return self._parse_output(result.stdout)
+            return self._parse_output(_to_text(result.stdout))
 
     async def _async_connect(
         self, *, trust_on_first_use: bool = False
@@ -451,3 +456,12 @@ class TerraMasterApiClient:
         total = sum(item[0] for item in unique.values())
         used = sum(item[1] for item in unique.values())
         return percentage(used, total)
+
+
+def _to_text(value: bytes | str | None) -> str:
+    """Normalize optional AsyncSSH process output to text."""
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return value
