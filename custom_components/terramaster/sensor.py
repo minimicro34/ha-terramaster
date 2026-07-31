@@ -24,6 +24,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.network import NoURLAvailableError, get_url
@@ -211,6 +212,28 @@ def _migrate_registry_defaults(hass: HomeAssistant) -> None:
                 break
 
 
+def _nas_device_info(
+    coordinator: TerraMasterDataUpdateCoordinator,
+    entry: TerraMasterConfigEntry,
+) -> DeviceInfo:
+    """Return the common device information for the main NAS."""
+    nas_id = entry.unique_id or entry.entry_id
+    device_info = DeviceInfo(
+        identifiers={(DOMAIN, nas_id)},
+        name=coordinator.data.hostname,
+        manufacturer="TerraMaster",
+        model=coordinator.data.model,
+        sw_version=coordinator.data.tos_version,
+    )
+    try:
+        base_url = get_url(coordinator.hass, prefer_external=True)
+    except NoURLAvailableError:
+        pass
+    else:
+        device_info["configuration_url"] = share_page_url(base_url, entry.entry_id)
+    return device_info
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: TerraMasterConfigEntry,
@@ -291,13 +314,7 @@ class TerraMasterSensor(
         self.entity_description = description
         device_id = entry.unique_id or entry.entry_id
         self._attr_unique_id = f"{device_id}_{description.key}"
-        self._attr_device_info = {
-            "identifiers": {("terramaster", device_id)},
-            "name": coordinator.data.hostname,
-            "manufacturer": "TerraMaster",
-            "model": coordinator.data.model,
-            "sw_version": coordinator.data.tos_version,
-        }
+        self._attr_device_info = _nas_device_info(coordinator, entry)
 
     @property
     def available(self) -> bool:
@@ -343,13 +360,7 @@ class TerraMasterCpuCoreSensor(
         )
         self._attr_unique_id = f"{nas_id}_{core_name}_usage"
         self._attr_translation_placeholders = {"core": display_number}
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, nas_id)},
-            "name": coordinator.data.hostname,
-            "manufacturer": "TerraMaster",
-            "model": coordinator.data.model,
-            "sw_version": coordinator.data.tos_version,
-        }
+        self._attr_device_info = _nas_device_info(coordinator, entry)
 
     def _core(self) -> TerraMasterCpuCore | None:
         return next(
@@ -403,13 +414,7 @@ class TerraMasterServiceSensor(
         nas_id = entry.unique_id or entry.entry_id
         self._attr_unique_id = f"{nas_id}_{service_name}_service"
         self._attr_translation_placeholders = {"service": service_name.upper()}
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, nas_id)},
-            "name": coordinator.data.hostname,
-            "manufacturer": "TerraMaster",
-            "model": coordinator.data.model,
-            "sw_version": coordinator.data.tos_version,
-        }
+        self._attr_device_info = _nas_device_info(coordinator, entry)
 
     def _service(self) -> TerraMasterService | None:
         return next(
@@ -474,13 +479,7 @@ class TerraMasterShareSensor(
         nas_id = entry.unique_id or entry.entry_id
         self._attr_unique_id = f"{nas_id}_share_{share_name}"
         self._attr_translation_placeholders = {"share": share_name}
-        self._attr_device_info = {
-            "identifiers": {(DOMAIN, nas_id)},
-            "name": coordinator.data.hostname,
-            "manufacturer": "TerraMaster",
-            "model": coordinator.data.model,
-            "sw_version": coordinator.data.tos_version,
-        }
+        self._attr_device_info = _nas_device_info(coordinator, entry)
 
     def _share(self) -> TerraMasterShare | None:
         return next(
