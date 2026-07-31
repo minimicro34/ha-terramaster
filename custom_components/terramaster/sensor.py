@@ -43,7 +43,7 @@ from .models import (
     TerraMasterShare,
     TerraMasterVolume,
 )
-from .share import share_connection_urls, share_page_url
+from .share import resolve_share_storage, share_connection_urls, share_page_url
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -515,6 +515,27 @@ class TerraMasterShareSensor(
             "recycle_bin": share.recycle_bin,
             "protocols": list(share.protocols),
         }
+        storage = resolve_share_storage(self.coordinator.data, share)
+        if storage.volume is not None:
+            attributes.update(
+                {
+                    "volume": storage.volume.name,
+                    "volume_mountpoint": storage.volume.mountpoint,
+                    "filesystem": storage.volume.filesystem,
+                    "capacity_bytes": storage.volume.size,
+                    "used_bytes": storage.volume.used,
+                    "available_bytes": storage.volume.available,
+                    "usage_percent": storage.volume.usage,
+                }
+            )
+        if storage.raid is not None:
+            attributes.update(
+                {
+                    "raid": storage.raid.name,
+                    "raid_level": storage.raid.level,
+                    "raid_state": storage.raid.state,
+                }
+            )
         urls = share_connection_urls(self._host, share)
         attributes.update({f"{protocol}_url": url for protocol, url in urls.items()})
         if urls:
