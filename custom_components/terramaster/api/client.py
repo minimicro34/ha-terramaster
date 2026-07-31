@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import shlex
+import time
 from typing import Any, cast
 
 import asyncssh
@@ -12,6 +13,7 @@ import asyncssh
 from ..models import (
     TerraMasterData,
     TerraMasterDisk,
+    TerraMasterNetwork,
     TerraMasterRaid,
     TerraMasterVolume,
 )
@@ -113,6 +115,16 @@ for disk_path in /sys/block/sd*; do
         done
     fi
 done
+for net_path in /sys/class/net/*; do
+    net_name=${net_path##*/}
+    case "$net_name" in lo|docker*|veth*|br-*|tun*|tap*) continue ;; esac
+    net_state=$(cat "$net_path/operstate" 2>/dev/null)
+    net_speed=$(cat "$net_path/speed" 2>/dev/null)
+    net_rx=$(cat "$net_path/statistics/rx_bytes" 2>/dev/null)
+    net_tx=$(cat "$net_path/statistics/tx_bytes" 2>/dev/null)
+    printf 'network=%s|%s|%s|%s|%s\n' \
+        "$net_name" "$net_state" "$net_speed" "$net_rx" "$net_tx"
+done
 """.strip()
 
 
@@ -133,6 +145,7 @@ class TerraMasterApiClient:
         self._password = password
         self._host_key = host_key
         self._previous_cpu: tuple[int, int] | None = None
+        self._previous_network: dict[str, tuple[float, int, int]] = {}
         self._lock = asyncio.Lock()
 
     async def async_test_connection(self) -> str:
@@ -199,6 +212,7 @@ class TerraMasterApiClient:
         raid_details: dict[str, list[str]] = {}
         physical_disks: dict[str, list[str]] = {}
         smart_lines: dict[str, list[str]] = {}
+        network_rows: list[str] = []
         for line in output.splitlines():
             key, separator, value = line.partition("=")
             if not separator:
@@ -234,6 +248,8 @@ class TerraMasterApiClient:
                 name, separator, line = value.partition("|")
                 if separator:
                     smart_lines.setdefault(name, []).append(line)
+            elif key == "network":
+                network_rows.append(value)
             else:
                 values[key] = value
 
@@ -259,7 +275,41 @@ class TerraMasterApiClient:
             disks=self._parse_physical_disks(physical_disks, smart_lines),
             raids=self._parse_raids(mdstat_lines, raid_details, lsblk_rows),
             volumes=self._parse_volumes(filesystems),
+            networks=self._parse_networks(network_rows),
         )
+
+    def _parse_networks(self, rows: list[str]) -> tuple[TerraMasterNetwork, ...]:
+        now = time.monotonic()
+        networks: list[TerraMasterNetwork] = []
+        for row in rows:
+            parts = row.split("|", 4)
+            if len(parts) != 5:
+                continue
+            name, state, speed_text, received_text, sent_text = parts
+            received = as_int(received_text)
+            sent = as_int(sent_text)
+            if received is None or sent is None:
+                continue
+            receive_rate: float | None = None
+            transmit_rate: float | None = None
+            if previous := self._previous_network.get(name):
+                elapsed = now - previous[0]
+                if elapsed > 0 and received >= previous[1] and sent >= previous[2]:
+                    receive_rate = round((received - previous[1]) / elapsed, 1)
+                    transmit_rate = round((sent - previous[2]) / elapsed, 1)
+            self._previous_network[name] = (now, received, sent)
+            networks.append(
+                TerraMasterNetwork(
+                    name=name,
+                    state=state or None,
+                    speed=as_int(speed_text),
+                    received_bytes=received,
+                    sent_bytes=sent,
+                    receive_rate=receive_rate,
+                    transmit_rate=transmit_rate,
+                )
+            )
+        return tuple(networks)
 
     @staticmethod
     def _parse_physical_disks(

@@ -16,6 +16,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import (
     PERCENTAGE,
+    UnitOfDataRate,
     UnitOfInformation,
     UnitOfTemperature,
     UnitOfTime,
@@ -31,6 +32,7 @@ from .coordinator import TerraMasterDataUpdateCoordinator
 from .models import (
     TerraMasterData,
     TerraMasterDisk,
+    TerraMasterNetwork,
     TerraMasterRaid,
     TerraMasterVolume,
 )
@@ -135,6 +137,7 @@ async def async_setup_entry(
             ("disk", entry.runtime_data.data.disks, DISK_SENSORS),
             ("raid", entry.runtime_data.data.raids, RAID_SENSORS),
             ("volume", entry.runtime_data.data.volumes, VOLUME_SENSORS),
+            ("network", entry.runtime_data.data.networks, NETWORK_SENSORS),
         ):
             for storage_object in objects:
                 for description in descriptions:
@@ -384,6 +387,51 @@ VOLUME_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
     ),
 )
 
+NETWORK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
+    TerraMasterStorageSensorDescription(
+        key="state",
+        translation_key="link_state",
+        icon="mdi:lan-connect",
+        value_fn=lambda network: network.state,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="speed",
+        translation_key="link_speed",
+        icon="mdi:speedometer",
+        native_unit_of_measurement="Mbit/s",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda network: network.speed,
+    ),
+    *tuple(
+        TerraMasterStorageSensorDescription(
+            key=key,
+            translation_key=translation_key,
+            device_class=SensorDeviceClass.DATA_SIZE,
+            native_unit_of_measurement=UnitOfInformation.BYTES,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            value_fn=partial(_attribute_value, attribute=key),
+        )
+        for key, translation_key in (
+            ("received_bytes", "received_data"),
+            ("sent_bytes", "sent_data"),
+        )
+    ),
+    *tuple(
+        TerraMasterStorageSensorDescription(
+            key=key,
+            translation_key=translation_key,
+            device_class=SensorDeviceClass.DATA_RATE,
+            native_unit_of_measurement=UnitOfDataRate.BYTES_PER_SECOND,
+            state_class=SensorStateClass.MEASUREMENT,
+            value_fn=partial(_attribute_value, attribute=key),
+        )
+        for key, translation_key in (
+            ("receive_rate", "receive_rate"),
+            ("transmit_rate", "transmit_rate"),
+        )
+    ),
+)
+
 
 class TerraMasterStorageSensor(
     CoordinatorEntity[TerraMasterDataUpdateCoordinator], SensorEntity
@@ -425,7 +473,15 @@ class TerraMasterStorageSensor(
             "via_device": (DOMAIN, nas_id),
         }
 
-    def _object(self) -> TerraMasterDisk | TerraMasterRaid | TerraMasterVolume | None:
+    def _object(
+        self,
+    ) -> (
+        TerraMasterDisk
+        | TerraMasterRaid
+        | TerraMasterVolume
+        | TerraMasterNetwork
+        | None
+    ):
         objects = getattr(self.coordinator.data, f"{self._kind}s")
         return next((item for item in objects if item.name == self._object_name), None)
 

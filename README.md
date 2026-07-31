@@ -32,6 +32,7 @@ TOS 4. It connects over SSH with `asyncssh`; the default TerraMaster SSH port is
 - Per-disk SMART health, temperature, power-on hours, power/start/load cycles,
   reallocated or pending sectors, spin retries and UDMA CRC errors when permitted
 - Per-volume capacity, used space, available space and usage
+- Per-interface link state, negotiated speed, transferred data and live traffic rates
 
 Model, version and temperature depend on the files exposed by a particular TOS build.
 When TOS does not expose a metric, its entity remains unavailable without preventing

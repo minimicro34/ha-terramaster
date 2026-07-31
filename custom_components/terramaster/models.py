@@ -61,6 +61,19 @@ class TerraMasterVolume:
 
 
 @dataclass(frozen=True, slots=True)
+class TerraMasterNetwork:
+    """A network interface and its traffic counters."""
+
+    name: str
+    state: str | None
+    speed: int | None
+    received_bytes: int
+    sent_bytes: int
+    receive_rate: float | None
+    transmit_rate: float | None
+
+
+@dataclass(frozen=True, slots=True)
 class TerraMasterData:
     """A snapshot of TerraMaster system data."""
 
@@ -76,3 +89,4 @@ class TerraMasterData:
     disks: tuple[TerraMasterDisk, ...] = ()
     raids: tuple[TerraMasterRaid, ...] = ()
     volumes: tuple[TerraMasterVolume, ...] = ()
+    networks: tuple[TerraMasterNetwork, ...] = ()

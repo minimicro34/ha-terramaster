@@ -64,7 +64,13 @@
       "mountpoint": {"name": "Mount point"},
       "used_space": {"name": "Used space"},
       "available_space": {"name": "Available space"},
-      "storage_role": {"name": "Storage role"}
+      "storage_role": {"name": "Storage role"},
+      "link_state": {"name": "Link state"},
+      "link_speed": {"name": "Link speed"},
+      "received_data": {"name": "Received data"},
+      "sent_data": {"name": "Sent data"},
+      "receive_rate": {"name": "Receive rate"},
+      "transmit_rate": {"name": "Transmit rate"}
     }
   }
 }

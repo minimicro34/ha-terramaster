@@ -48,7 +48,13 @@
       "mountpoint": {"name": "Point de montage"},
       "used_space": {"name": "Espace utilisé"},
       "available_space": {"name": "Espace disponible"},
-      "storage_role": {"name": "Rôle du stockage"}
+      "storage_role": {"name": "Rôle du stockage"},
+      "link_state": {"name": "État de la liaison"},
+      "link_speed": {"name": "Vitesse de la liaison"},
+      "received_data": {"name": "Données reçues"},
+      "sent_data": {"name": "Données envoyées"},
+      "receive_rate": {"name": "Débit entrant"},
+      "transmit_rate": {"name": "Débit sortant"}
     }
   }
 }

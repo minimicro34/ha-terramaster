@@ -28,6 +28,7 @@ raid=md0|raid1|clean|0|idle|none
 lsblk=NAME="md0" SIZE="994648784896"
 filesystem=/dev/mapper/vg0-lv0|btrfs|971333632|444025736|524035576|/mnt/md0
 filesystem=/dev/mapper/vg0-lv0|btrfs|971333632|444025736|524035576|/home
+network=eth0|up|1000|1000000|500000
 """
 
 
@@ -63,6 +64,9 @@ def test_parse_output() -> None:
     assert first.raids[0].state == "clean"
     assert first.raids[0].members == ("sdb4", "sdc4")
     assert len(first.volumes) == 1
+    assert first.networks[0].name == "eth0"
+    assert first.networks[0].speed == 1000
+    assert first.networks[0].receive_rate is None
 
 
 def test_parse_missing_values() -> None:
