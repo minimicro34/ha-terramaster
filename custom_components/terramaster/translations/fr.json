@@ -19,13 +19,13 @@
   "entity": {
     "sensor": {
       "model": {"name": "Modèle"},
-      "platform": {"name": "Plateforme matérielle"},
+      "platform": {"name": "SoC / plateforme matérielle"},
       "tos_version": {"name": "Version de TOS"},
       "linux_distribution": {"name": "Distribution Linux"},
       "kernel_version": {"name": "Version du noyau Linux"},
       "uptime": {"name": "Durée de fonctionnement"},
       "last_restart": {"name": "Dernier redémarrage"},
-      "cpu_model": {"name": "Processeur"},
+      "cpu_model": {"name": "Modèle du processeur"},
       "cpu_usage": {"name": "Utilisation du processeur"},
       "cpu_core_usage": {"name": "Cœur processeur {core}"},
       "memory_total": {"name": "Mémoire totale"},

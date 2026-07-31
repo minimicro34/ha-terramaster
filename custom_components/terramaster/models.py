@@ -91,6 +91,7 @@ class TerraMasterShare:
     share_type: str
     hidden: bool
     recycle_bin: bool
+    protocols: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
