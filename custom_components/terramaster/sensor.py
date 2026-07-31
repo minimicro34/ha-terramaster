@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from typing import Any
-from urllib.parse import quote
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -27,6 +26,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import TerraMasterConfigEntry
@@ -42,6 +42,7 @@ from .models import (
     TerraMasterShare,
     TerraMasterVolume,
 )
+from .share import share_connection_urls, share_page_url
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -174,18 +175,12 @@ SENSORS: tuple[TerraMasterSensorEntityDescription, ...] = (
 
 
 _SUGGESTED_UNIT_MIGRATIONS = {
-    "_uptime": (UnitOfTime.SECONDS, UnitOfTime.DAYS),
-    "_power_on_hours": (UnitOfTime.HOURS, UnitOfTime.DAYS),
-    "_receive_rate": (
-        UnitOfDataRate.BYTES_PER_SECOND,
-        UnitOfDataRate.MEGABITS_PER_SECOND,
-    ),
-    "_transmit_rate": (
-        UnitOfDataRate.BYTES_PER_SECOND,
-        UnitOfDataRate.MEGABITS_PER_SECOND,
-    ),
-    "_received_bytes": (UnitOfInformation.BYTES, UnitOfInformation.GIGABYTES),
-    "_sent_bytes": (UnitOfInformation.BYTES, UnitOfInformation.GIGABYTES),
+    "_uptime": UnitOfTime.DAYS,
+    "_power_on_hours": UnitOfTime.DAYS,
+    "_receive_rate": UnitOfDataRate.MEGABITS_PER_SECOND,
+    "_transmit_rate": UnitOfDataRate.MEGABITS_PER_SECOND,
+    "_received_bytes": UnitOfInformation.GIGABYTES,
+    "_sent_bytes": UnitOfInformation.GIGABYTES,
 }
 
 
@@ -206,8 +201,8 @@ def _migrate_registry_defaults(hass: HomeAssistant) -> None:
             "sensor.private", {}
         )
         current_unit = private_options.get("suggested_unit_of_measurement")
-        for suffix, (old_unit, new_unit) in _SUGGESTED_UNIT_MIGRATIONS.items():
-            if registry_entry.unique_id.endswith(suffix) and current_unit == old_unit:
+        for suffix, new_unit in _SUGGESTED_UNIT_MIGRATIONS.items():
+            if registry_entry.unique_id.endswith(suffix) and current_unit != new_unit:
                 registry.async_update_entity_options(
                     registry_entry.entity_id,
                     "sensor.private",
@@ -473,8 +468,9 @@ class TerraMasterShareSensor(
     ) -> None:
         super().__init__(coordinator)
         self._share_name = share_name
-        host = str(entry.data[CONF_HOST])
-        self._host = f"[{host}]" if ":" in host and not host.startswith("[") else host
+        self._home_assistant = coordinator.hass
+        self._host = str(entry.data[CONF_HOST])
+        self._entry_id = entry.entry_id
         nas_id = entry.unique_id or entry.entry_id
         self._attr_unique_id = f"{nas_id}_share_{share_name}"
         self._attr_translation_placeholders = {"share": share_name}
@@ -520,13 +516,17 @@ class TerraMasterShareSensor(
             "recycle_bin": share.recycle_bin,
             "protocols": list(share.protocols),
         }
-        encoded_name = quote(share.name, safe="")
-        if "smb" in share.protocols:
-            attributes["smb_url"] = f"smb://{self._host}/{encoded_name}"
-        if "nfs" in share.protocols:
-            attributes["nfs_url"] = f"nfs://{self._host}{quote(share.path, safe='/')}"
-        if "afp" in share.protocols:
-            attributes["afp_url"] = f"afp://{self._host}/{encoded_name}"
+        urls = share_connection_urls(self._host, share)
+        attributes.update({f"{protocol}_url": url for protocol, url in urls.items()})
+        if urls:
+            try:
+                base_url = get_url(self._home_assistant, prefer_external=True)
+            except NoURLAvailableError:
+                pass
+            else:
+                attributes["open_share"] = share_page_url(
+                    base_url, self._entry_id, share.name
+                )
         return attributes
 
 

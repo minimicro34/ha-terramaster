@@ -37,7 +37,9 @@ TOS 4. It connects over SSH with `asyncssh`; the default TerraMaster SSH port is
   rates in Mbit/s
 - TOS shared folders as entities on the main NAS device, with path, backing device,
   type, visibility and recycle-bin details; connection URLs are exposed only for the
-  SMB/CIFS, NFS and AFP protocols currently available on each folder
+  SMB/CIFS, NFS and AFP protocols currently available on each folder. The clickable
+  `open_share` link opens an authenticated connection page because Home Assistant's
+  frontend intentionally allows only HTTP(S) entity-attribute links
 - SSH, Telnet and SNMP runtime status with listening protocol and port attributes
 
 The commercial model is read with TOS's privileged `getmodel` utility. The

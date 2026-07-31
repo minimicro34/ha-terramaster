@@ -1,12 +1,13 @@
 """Tests for dynamic TerraMaster storage sensors."""
 
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from homeassistant.const import (
     CONF_HOST,
     CONF_PASSWORD,
     CONF_PORT,
     CONF_USERNAME,
+    UnitOfInformation,
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
@@ -141,10 +142,21 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         "nas.local:9222_memory_total",
         entity_category=EntityCategory.DIAGNOSTIC,
     )
+    received_registry_entry = registry.async_get_or_create(
+        "sensor", DOMAIN, "nas.local:9222_network_eth0_received_bytes"
+    )
+    sent_registry_entry = registry.async_get_or_create(
+        "sensor", DOMAIN, "nas.local:9222_network_eth0_sent_bytes"
+    )
     registry.async_update_entity_options(
         uptime_registry_entry.entity_id,
         "sensor.private",
         {"suggested_unit_of_measurement": UnitOfTime.SECONDS},
+    )
+    registry.async_update_entity_options(
+        sent_registry_entry.entity_id,
+        "sensor",
+        {"unit_of_measurement": UnitOfInformation.BYTES},
     )
 
     try:
@@ -160,6 +172,17 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         )
         assert migrated_memory_total is not None
         assert migrated_memory_total.entity_category is None
+        migrated_received = registry.async_get(received_registry_entry.entity_id)
+        assert migrated_received is not None
+        assert migrated_received.options["sensor.private"] == {
+            "suggested_unit_of_measurement": UnitOfInformation.GIGABYTES
+        }
+        migrated_sent = registry.async_get(sent_registry_entry.entity_id)
+        assert migrated_sent is not None
+        assert migrated_sent.options["sensor"] == {
+            "unit_of_measurement": UnitOfInformation.BYTES
+        }
+        assert "sensor.private" not in migrated_sent.options
 
         device_names = {
             entity.device_info["name"]
@@ -187,12 +210,16 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         )
         assert share_entity.device_info["name"] == "NAS-NICO"
         assert share_entity.native_value == "/mnt/md0/public"
-        assert share_entity.extra_state_attributes["smb_url"] == (
-            "smb://nas.local/public"
+        with patch(
+            "custom_components.terramaster.sensor.get_url",
+            return_value="https://ha.example",
+        ):
+            attributes = share_entity.extra_state_attributes
+        assert attributes["smb_url"] == "smb://nas.local/public"
+        assert attributes["nfs_url"] == "nfs://nas.local/mnt/md0/public"
+        assert attributes["open_share"].startswith(
+            "https://ha.example/api/terramaster/share?"
         )
-        assert share_entity.extra_state_attributes["nfs_url"] == (
-            "nfs://nas.local/mnt/md0/public"
-        )
-        assert "afp_url" not in share_entity.extra_state_attributes
+        assert "afp_url" not in attributes
     finally:
         await coordinator.async_shutdown()
