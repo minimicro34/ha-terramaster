@@ -30,10 +30,13 @@ from . import TerraMasterConfigEntry
 from .const import DOMAIN
 from .coordinator import TerraMasterDataUpdateCoordinator
 from .models import (
+    TerraMasterCpuCore,
     TerraMasterData,
     TerraMasterDisk,
     TerraMasterNetwork,
     TerraMasterRaid,
+    TerraMasterService,
+    TerraMasterShare,
     TerraMasterVolume,
 )
 
@@ -54,6 +57,13 @@ SENSORS: tuple[TerraMasterSensorEntityDescription, ...] = (
         value_fn=lambda data: data.model,
     ),
     TerraMasterSensorEntityDescription(
+        key="platform",
+        translation_key="platform",
+        icon="mdi:developer-board",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.platform,
+    ),
+    TerraMasterSensorEntityDescription(
         key="tos_version",
         translation_key="tos_version",
         icon="mdi:package-up",
@@ -61,13 +71,29 @@ SENSORS: tuple[TerraMasterSensorEntityDescription, ...] = (
         value_fn=lambda data: data.tos_version,
     ),
     TerraMasterSensorEntityDescription(
+        key="linux_distribution",
+        translation_key="linux_distribution",
+        icon="mdi:linux",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.linux_distribution,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="kernel_version",
+        translation_key="kernel_version",
+        icon="mdi:linux",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.kernel_version,
+    ),
+    TerraMasterSensorEntityDescription(
         key="uptime",
         translation_key="uptime",
         device_class=SensorDeviceClass.DURATION,
-        native_unit_of_measurement=UnitOfTime.SECONDS,
+        native_unit_of_measurement=UnitOfTime.DAYS,
         entity_category=EntityCategory.DIAGNOSTIC,
-        suggested_display_precision=0,
-        value_fn=lambda data: data.uptime,
+        suggested_display_precision=1,
+        value_fn=lambda data: (
+            round(data.uptime / 86400, 2) if data.uptime is not None else None
+        ),
     ),
     TerraMasterSensorEntityDescription(
         key="last_restart",
@@ -81,6 +107,13 @@ SENSORS: tuple[TerraMasterSensorEntityDescription, ...] = (
         ),
     ),
     TerraMasterSensorEntityDescription(
+        key="cpu_model",
+        translation_key="cpu_model",
+        icon="mdi:chip",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.cpu_model,
+    ),
+    TerraMasterSensorEntityDescription(
         key="cpu_usage",
         translation_key="cpu_usage",
         icon="mdi:cpu-64-bit",
@@ -88,6 +121,24 @@ SENSORS: tuple[TerraMasterSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
         value_fn=lambda data: data.cpu_usage,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="memory_total",
+        translation_key="memory_total",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.memory_total,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="memory_available",
+        translation_key="memory_available",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.memory_available,
     ),
     TerraMasterSensorEntityDescription(
         key="memory_usage",
@@ -129,10 +180,28 @@ async def async_setup_entry(
         TerraMasterSensor(entry.runtime_data, entry, description)
         for description in SENSORS
     )
+    async_add_entities(
+        TerraMasterServiceSensor(entry.runtime_data, entry, service_name)
+        for service_name in ("ssh", "telnet", "snmp")
+    )
     known: set[tuple[str, str, str]] = set()
+    known_cpu_cores: set[str] = set()
+    known_shares: set[str] = set()
 
-    def async_discover_storage() -> None:
-        entities: list[TerraMasterStorageSensor] = []
+    def async_discover_entities() -> None:
+        entities: list[SensorEntity] = []
+        for share in entry.runtime_data.data.shares:
+            if share.name not in known_shares:
+                known_shares.add(share.name)
+                entities.append(
+                    TerraMasterShareSensor(entry.runtime_data, entry, share.name)
+                )
+        for core in entry.runtime_data.data.cpu_cores:
+            if core.name not in known_cpu_cores:
+                known_cpu_cores.add(core.name)
+                entities.append(
+                    TerraMasterCpuCoreSensor(entry.runtime_data, entry, core.name)
+                )
         for kind, objects, descriptions in (
             ("disk", entry.runtime_data.data.disks, DISK_SENSORS),
             ("raid", entry.runtime_data.data.raids, RAID_SENSORS),
@@ -156,8 +225,10 @@ async def async_setup_entry(
         if entities:
             async_add_entities(entities)
 
-    async_discover_storage()
-    entry.async_on_unload(entry.runtime_data.async_add_listener(async_discover_storage))
+    async_discover_entities()
+    entry.async_on_unload(
+        entry.runtime_data.async_add_listener(async_discover_entities)
+    )
 
 
 class TerraMasterSensor(
@@ -195,6 +266,210 @@ class TerraMasterSensor(
     def native_value(self) -> Any:
         """Return the current sensor value."""
         return self.entity_description.value_fn(self.coordinator.data)
+
+
+CPU_CORE_SENSOR = SensorEntityDescription(
+    key="cpu_core_usage",
+    translation_key="cpu_core_usage",
+    icon="mdi:cpu-64-bit",
+    native_unit_of_measurement=PERCENTAGE,
+    state_class=SensorStateClass.MEASUREMENT,
+    suggested_display_precision=1,
+)
+
+
+class TerraMasterCpuCoreSensor(
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator], SensorEntity
+):
+    """Utilization sensor for a dynamically discovered logical CPU core."""
+
+    entity_description = CPU_CORE_SENSOR
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: TerraMasterDataUpdateCoordinator,
+        entry: TerraMasterConfigEntry,
+        core_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._core_name = core_name
+        nas_id = entry.unique_id or entry.entry_id
+        core_number = core_name.removeprefix("cpu")
+        display_number = (
+            str(int(core_number) + 1) if core_number.isdigit() else core_name
+        )
+        self._attr_unique_id = f"{nas_id}_{core_name}_usage"
+        self._attr_translation_placeholders = {"core": display_number}
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, nas_id)},
+            "name": coordinator.data.hostname,
+            "manufacturer": "TerraMaster",
+            "model": coordinator.data.model,
+            "sw_version": coordinator.data.tos_version,
+        }
+
+    def _core(self) -> TerraMasterCpuCore | None:
+        return next(
+            (
+                core
+                for core in self.coordinator.data.cpu_cores
+                if core.name == self._core_name
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return whether the core utilization sample is available."""
+        core = self._core()
+        return super().available and core is not None and core.usage is not None
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current logical CPU utilization."""
+        core = self._core()
+        return core.usage if core is not None else None
+
+
+SERVICE_SENSOR = SensorEntityDescription(
+    key="service_status",
+    translation_key="service_status",
+    device_class=SensorDeviceClass.ENUM,
+    options=["enabled", "disabled"],
+    icon="mdi:server-network",
+    entity_category=EntityCategory.DIAGNOSTIC,
+)
+
+
+class TerraMasterServiceSensor(
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator], SensorEntity
+):
+    """Status and listening ports for a TOS management service."""
+
+    entity_description = SERVICE_SENSOR
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: TerraMasterDataUpdateCoordinator,
+        entry: TerraMasterConfigEntry,
+        service_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._service_name = service_name
+        nas_id = entry.unique_id or entry.entry_id
+        self._attr_unique_id = f"{nas_id}_{service_name}_service"
+        self._attr_translation_placeholders = {"service": service_name.upper()}
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, nas_id)},
+            "name": coordinator.data.hostname,
+            "manufacturer": "TerraMaster",
+            "model": coordinator.data.model,
+            "sw_version": coordinator.data.tos_version,
+        }
+
+    def _service(self) -> TerraMasterService | None:
+        return next(
+            (
+                service
+                for service in self.coordinator.data.services
+                if service.name == self._service_name
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return whether service detection was available."""
+        service = self._service()
+        return super().available and service is not None and service.enabled is not None
+
+    @property
+    def native_value(self) -> str | None:
+        """Return enabled or disabled."""
+        service = self._service()
+        if service is None or service.enabled is None:
+            return None
+        return "enabled" if service.enabled else "disabled"
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        """Return listening port and protocol details."""
+        service = self._service()
+        if service is None:
+            return None
+        return {"ports": list(service.ports), "protocols": list(service.protocols)}
+
+
+SHARE_SENSOR = SensorEntityDescription(
+    key="shared_folder",
+    translation_key="shared_folder",
+    icon="mdi:folder-network",
+    entity_category=EntityCategory.DIAGNOSTIC,
+)
+
+
+class TerraMasterShareSensor(
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator], SensorEntity
+):
+    """A TOS shared folder attached to the main NAS device."""
+
+    entity_description = SHARE_SENSOR
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: TerraMasterDataUpdateCoordinator,
+        entry: TerraMasterConfigEntry,
+        share_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._share_name = share_name
+        nas_id = entry.unique_id or entry.entry_id
+        self._attr_unique_id = f"{nas_id}_share_{share_name}"
+        self._attr_translation_placeholders = {"share": share_name}
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, nas_id)},
+            "name": coordinator.data.hostname,
+            "manufacturer": "TerraMaster",
+            "model": coordinator.data.model,
+            "sw_version": coordinator.data.tos_version,
+        }
+
+    def _share(self) -> TerraMasterShare | None:
+        return next(
+            (
+                share
+                for share in self.coordinator.data.shares
+                if share.name == self._share_name
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return whether the shared folder still exists."""
+        return super().available and self._share() is not None
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the shared-folder path."""
+        share = self._share()
+        return share.path if share is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object] | None:
+        """Return shared-folder details."""
+        share = self._share()
+        if share is None:
+            return None
+        return {
+            "device": share.device,
+            "type": share.share_type,
+            "hidden": share.hidden,
+            "recycle_bin": share.recycle_bin,
+        }
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -257,9 +532,14 @@ DISK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
         key="power_on_hours",
         translation_key="power_on_time",
         device_class=SensorDeviceClass.DURATION,
-        native_unit_of_measurement=UnitOfTime.HOURS,
+        native_unit_of_measurement=UnitOfTime.DAYS,
         entity_category=EntityCategory.DIAGNOSTIC,
-        value_fn=lambda disk: disk.power_on_hours,
+        suggested_display_precision=1,
+        value_fn=lambda disk: (
+            round(disk.power_on_hours / 24, 2)
+            if disk.power_on_hours is not None
+            else None
+        ),
     ),
     *tuple(
         TerraMasterStorageSensorDescription(
@@ -408,6 +688,7 @@ NETWORK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
             translation_key=translation_key,
             device_class=SensorDeviceClass.DATA_SIZE,
             native_unit_of_measurement=UnitOfInformation.BYTES,
+            suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
             state_class=SensorStateClass.TOTAL_INCREASING,
             value_fn=partial(_attribute_value, attribute=key),
         )
@@ -421,8 +702,9 @@ NETWORK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
             key=key,
             translation_key=translation_key,
             device_class=SensorDeviceClass.DATA_RATE,
-            native_unit_of_measurement=UnitOfDataRate.BYTES_PER_SECOND,
+            native_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
             state_class=SensorStateClass.MEASUREMENT,
+            suggested_display_precision=3,
             value_fn=partial(_attribute_value, attribute=key),
         )
         for key, translation_key in (

@@ -11,10 +11,13 @@ from typing import Any
 import asyncssh
 
 from ..models import (
+    TerraMasterCpuCore,
     TerraMasterData,
     TerraMasterDisk,
     TerraMasterNetwork,
     TerraMasterRaid,
+    TerraMasterService,
+    TerraMasterShare,
     TerraMasterVolume,
 )
 from .exceptions import (
@@ -48,14 +51,48 @@ first_file() {
     done
 }
 printf 'hostname='; hostname 2>/dev/null || uname -n
-model=$(first_file /etc/model /etc/terramaster/model /proc/device-tree/model)
-printf 'model=%s\n' "$model"
-tos_version=$(first_file /etc/version /etc/TOS_VERSION /etc/terramaster/version)
-if [ -z "$tos_version" ] && [ -r /etc/os-release ]; then
-    tos_version=$(awk -F= '/^VERSION_ID=/ {gsub(/"/, "", $2); print $2}' \
-        /etc/os-release)
+model=''
+if command -v getmodel >/dev/null 2>&1; then
+    model=$(getmodel 2>/dev/null)
+elif [ -x /sbin/getmodel ]; then
+    model=$(/sbin/getmodel 2>/dev/null)
 fi
+[ "$model" = "---" ] && model=''
+if [ -z "$model" ]; then
+    model_candidate=$(first_file /sys/class/dmi/id/product_name \
+        /etc/terramaster/model)
+    case "$model_candidate" in *-*) model=$model_candidate ;; esac
+fi
+printf 'model=%s\n' "$model"
+platform=$(first_file /etc/model /proc/device-tree/model \
+    /tmp/sysinfo/model /tmp/sysinfo/board_name)
+printf 'platform=%s\n' "$platform"
+tos_version=''
+for file in /usr/www/version /etc/version /etc/TOS_VERSION /etc/tos_version \
+    /etc/tos-version /etc/tos-release /etc/TOS_RELEASE \
+    /etc/tnas_version /etc/terramaster/version /etc/base/*version* \
+    /etc/base/*release* /usr/local/etc/version /usr/www/*version* \
+    /usr/www/include/*version* /usr/www/inc/*version*; do
+    [ -r "$file" ] || continue
+    tos_version=$(awk \
+        'match($0, /[0-9]+\.[0-9]+\.[0-9]+([-._][0-9]+)?/) \
+        {print substr($0, RSTART, RLENGTH); exit}' "$file" 2>/dev/null)
+    [ -n "$tos_version" ] && break
+done
 printf 'tos_version=%s\n' "$tos_version"
+linux_distribution=''
+if [ -r /etc/os-release ]; then
+    linux_distribution=$(awk -F= '/^PRETTY_NAME=/ {
+        sub(/^[^=]*=/, ""); gsub(/"/, ""); print; exit
+    }' /etc/os-release)
+fi
+if [ -z "$linux_distribution" ] && [ -r /etc/openwrt_release ]; then
+    linux_distribution=$(awk -F= '/^DISTRIB_DESCRIPTION=/ {
+        sub(/^[^=]*=/, ""); gsub(/\047/, ""); print; exit
+    }' /etc/openwrt_release)
+fi
+printf 'linux_distribution=%s\n' "$linux_distribution"
+printf 'kernel_version='; uname -r 2>/dev/null
 printf 'uptime='; cut -d. -f1 /proc/uptime 2>/dev/null
 printf 'boot_time='; awk '/^btime / {print $2}' /proc/stat
 printf 'mem_total='; awk '/^MemTotal:/ {print $2}' /proc/meminfo
@@ -65,7 +102,19 @@ if ! grep -q '^MemAvailable:' /proc/meminfo; then
     awk '/^MemFree:|^Buffers:|^Cached:/ {sum += $2} END {print sum}' \
         /proc/meminfo
 fi
+cpu_model=$(awk -F: \
+    '/^(model name|Processor|Hardware)[[:space:]]*:/ {
+        sub(/^[[:space:]]+/, "", $2); print $2; exit
+    }' /proc/cpuinfo 2>/dev/null)
+[ -z "$cpu_model" ] && cpu_model=$platform
+[ -z "$cpu_model" ] && cpu_model=$(uname -m 2>/dev/null)
+printf 'cpu_model=%s\n' "$cpu_model"
 printf 'cpu='; awk '/^cpu / {print $2,$3,$4,$5,$6,$7,$8,$9}' /proc/stat
+awk '/^cpu[0-9]+ / {
+    printf "cpu_core=%s", $1
+    for (field = 2; field <= 9; field++) printf " %s", $field
+    print ""
+}' /proc/stat
 temperature=''
 for file in /sys/class/thermal/thermal_zone*/temp \
     /sys/class/hwmon/hwmon*/temp*_input; do
@@ -101,19 +150,6 @@ for disk_path in /sys/block/sd*; do
     disk_sectors=$(cat "$disk_path/size" 2>/dev/null)
     printf 'physical_disk=%s|%s|%s|%s|%s\n' \
         "$disk_name" "$disk_model" "$disk_serial" "$disk_state" "$disk_sectors"
-    if command -v smartctl >/dev/null 2>&1; then
-        smart_output=$(smartctl -H -A -d sat "/dev/$disk_name" 2>/dev/null)
-        if ! printf '%s\n' "$smart_output" | \
-            grep -q 'START OF READ SMART DATA' && \
-            command -v sudo >/dev/null 2>&1; then
-            smart_output=$(sudo -n smartctl -H -A -d sat \
-                "/dev/$disk_name" 2>/dev/null)
-        fi
-        printf '%s\n' "$smart_output" | while IFS= read -r smart_line; do
-            [ -n "$smart_line" ] && printf 'smart=%s|%s\n' \
-                "$disk_name" "$smart_line"
-        done
-    fi
 done
 for net_path in /sys/class/net/*; do
     net_name=${net_path##*/}
@@ -125,6 +161,55 @@ for net_path in /sys/class/net/*; do
     printf 'network=%s|%s|%s|%s|%s\n' \
         "$net_name" "$net_state" "$net_speed" "$net_rx" "$net_tx"
 done
+""".strip()
+
+
+_OPTIONAL_COMMAND = r"""
+tos_version=''
+for file in /usr/www/version /etc/version /etc/TOS_VERSION /etc/tos_version \
+    /etc/tos-version /etc/tos-release /etc/TOS_RELEASE \
+    /etc/tnas_version /etc/terramaster/version /etc/base/*version* \
+    /etc/base/*release* /usr/local/etc/version /usr/www/*version* \
+    /usr/www/include/*version* /usr/www/inc/*version*; do
+    [ -r "$file" ] || continue
+    tos_version=$(awk \
+        'match($0, /[0-9]+\.[0-9]+\.[0-9]+([-._][0-9]+)?/) \
+        {print substr($0, RSTART, RLENGTH); exit}' "$file" 2>/dev/null)
+    [ -n "$tos_version" ] && break
+done
+[ -n "$tos_version" ] && printf 'tos_version=%s\n' "$tos_version"
+
+if command -v smartctl >/dev/null 2>&1; then
+    for disk_path in /sys/block/sd*; do
+        [ -d "$disk_path" ] || continue
+        disk_name=${disk_path##*/}
+        smart_output=$(smartctl -H -A -d sat "/dev/$disk_name" 2>&1)
+        if printf '%s\n' "$smart_output" | grep -q \
+            -e 'START OF READ SMART DATA' -e 'SMART overall-health'; then
+            printf '%s\n' "$smart_output" | while IFS= read -r smart_line; do
+                [ -n "$smart_line" ] && printf 'smart=%s|%s\n' \
+                    "$disk_name" "$smart_line"
+            done
+        fi
+    done
+fi
+
+if command -v sqlite3 >/dev/null 2>&1 && [ -r /etc/base/nasdb ]; then
+    sqlite3 -separator '|' /etc/base/nasdb \
+        'SELECT foldername,mntpath,device,type,hidden,recycle FROM share;' \
+        2>/dev/null | while IFS='|' read -r share_name share_path \
+            share_device share_type share_hidden share_recycle; do
+        printf 'share=%s|%s|%s|%s|%s|%s\n' "$share_name" "$share_path" \
+            "$share_device" "$share_type" "$share_hidden" "$share_recycle"
+    done
+fi
+
+if command -v netstat >/dev/null 2>&1; then
+    printf 'listeners_available=1\n'
+    netstat -lntup 2>/dev/null | awk \
+        'NR > 2 && ($1 ~ /^tcp/ || $1 ~ /^udp/) \
+        {print "listener=" $1 "|" $4 "|" $NF}'
+fi
 """.strip()
 
 
@@ -145,7 +230,10 @@ class TerraMasterApiClient:
         self._password = password
         self._host_key = host_key
         self._previous_cpu: tuple[int, int] | None = None
+        self._previous_cpu_cores: dict[str, tuple[int, int]] = {}
         self._previous_network: dict[str, tuple[float, int, int]] = {}
+        self._sudo_optional_available: bool | None = None
+        self._clock = time.monotonic
         self._lock = asyncio.Lock()
 
     async def async_test_connection(self) -> str:
@@ -168,19 +256,56 @@ class TerraMasterApiClient:
             connection = await self._async_connect()
             try:
                 result = await connection.run(_COLLECT_COMMAND, check=False, timeout=30)
+                if result.exit_status != 0:
+                    raise TerraMasterCommandError(
+                        _to_text(result.stderr).strip()
+                        or f"Command exited with {result.exit_status}"
+                    )
+                output = _to_text(result.stdout)
+                optional_output = await self._async_collect_optional_data(connection)
             except (TimeoutError, asyncssh.Error, OSError) as err:
                 raise TerraMasterConnectionError(str(err)) from err
             finally:
                 connection.close()
                 await connection.wait_closed()
 
-            if result.exit_status != 0:
-                raise TerraMasterCommandError(
-                    _to_text(result.stderr).strip()
-                    or f"Command exited with {result.exit_status}"
-                )
+            return self._parse_output("\n".join((output, optional_output)))
 
-            return self._parse_output(_to_text(result.stdout))
+    async def _async_collect_optional_data(
+        self, connection: asyncssh.SSHClientConnection
+    ) -> str:
+        """Collect read-only version and SMART data with administrator access."""
+        if self._sudo_optional_available is False:
+            return ""
+
+        is_root = self._username == "root"
+        command = (
+            _OPTIONAL_COMMAND
+            if is_root
+            else f"sudo -S -p '' sh -c {shlex.quote(_OPTIONAL_COMMAND)}"
+        )
+        try:
+            result = await connection.run(
+                command,
+                input=None if is_root else f"{self._password}\n",
+                check=False,
+                timeout=30,
+            )
+        except (TimeoutError, asyncssh.Error, OSError) as err:
+            _LOGGER.debug("Optional TerraMaster metrics failed: %s", err)
+            return ""
+        if result.exit_status == 0:
+            self._sudo_optional_available = True
+            return _to_text(result.stdout)
+
+        # A failed password must not be retried every refresh: TOS temporarily
+        # blocks sudo after three failures.
+        self._sudo_optional_available = False
+        _LOGGER.debug(
+            "Optional privileged TerraMaster metrics are unavailable: %s",
+            _to_text(result.stderr).strip() or result.exit_status,
+        )
+        return ""
 
     async def _async_connect(
         self, *, trust_on_first_use: bool = False
@@ -218,6 +343,9 @@ class TerraMasterApiClient:
         physical_disks: dict[str, list[str]] = {}
         smart_lines: dict[str, list[str]] = {}
         network_rows: list[str] = []
+        cpu_core_rows: list[str] = []
+        share_rows: list[str] = []
+        listener_rows: list[str] = []
         for line in output.splitlines():
             key, separator, value = line.partition("=")
             if not separator:
@@ -255,13 +383,21 @@ class TerraMasterApiClient:
                     smart_lines.setdefault(name, []).append(line)
             elif key == "network":
                 network_rows.append(value)
+            elif key == "cpu_core":
+                cpu_core_rows.append(value)
+            elif key == "share":
+                share_rows.append(value)
+            elif key == "listener":
+                listener_rows.append(value)
             else:
                 values[key] = value
 
         cpu_usage = self._calculate_cpu(values.get("cpu"))
-        memory_total = as_int(values.get("mem_total"), default=0) or 0
-        memory_available = as_int(values.get("mem_available"), default=0) or 0
-        memory_usage = percentage(memory_total - memory_available, memory_total)
+        memory_total_kib = as_int(values.get("mem_total"), default=0) or 0
+        memory_available_kib = as_int(values.get("mem_available"), default=0) or 0
+        memory_usage = percentage(
+            memory_total_kib - memory_available_kib, memory_total_kib
+        )
         disk_usage = self._calculate_disk_usage(disks)
         temperature = as_float(values.get("temperature"))
         if temperature is not None and temperature > 1000:
@@ -270,10 +406,18 @@ class TerraMasterApiClient:
         return TerraMasterData(
             hostname=values.get("hostname") or self._host,
             model=values.get("model") or None,
+            platform=values.get("platform") or None,
             tos_version=values.get("tos_version") or None,
+            linux_distribution=values.get("linux_distribution") or None,
+            kernel_version=values.get("kernel_version") or None,
             uptime=as_int(values.get("uptime")),
             boot_time=as_int(values.get("boot_time")),
+            cpu_model=values.get("cpu_model") or None,
             cpu_usage=cpu_usage,
+            memory_total=memory_total_kib * 1024 if memory_total_kib else None,
+            memory_available=(
+                memory_available_kib * 1024 if memory_available_kib else None
+            ),
             memory_usage=memory_usage,
             temperature=temperature,
             disk_usage=disk_usage,
@@ -281,10 +425,15 @@ class TerraMasterApiClient:
             raids=self._parse_raids(mdstat_lines, raid_details, lsblk_rows),
             volumes=self._parse_volumes(filesystems),
             networks=self._parse_networks(network_rows),
+            cpu_cores=self._parse_cpu_cores(cpu_core_rows),
+            shares=self._parse_shares(share_rows),
+            services=self._parse_services(
+                listener_rows, values.get("listeners_available") == "1"
+            ),
         )
 
     def _parse_networks(self, rows: list[str]) -> tuple[TerraMasterNetwork, ...]:
-        now = time.monotonic()
+        now = self._clock()
         networks: list[TerraMasterNetwork] = []
         for row in rows:
             parts = row.split("|", 4)
@@ -300,8 +449,12 @@ class TerraMasterApiClient:
             if previous := self._previous_network.get(name):
                 elapsed = now - previous[0]
                 if elapsed > 0 and received >= previous[1] and sent >= previous[2]:
-                    receive_rate = round((received - previous[1]) / elapsed, 1)
-                    transmit_rate = round((sent - previous[2]) / elapsed, 1)
+                    receive_rate = round(
+                        (received - previous[1]) * 8 / elapsed / 1_000_000, 3
+                    )
+                    transmit_rate = round(
+                        (sent - previous[2]) * 8 / elapsed / 1_000_000, 3
+                    )
             self._previous_network[name] = (now, received, sent)
             networks.append(
                 TerraMasterNetwork(
@@ -315,6 +468,81 @@ class TerraMasterApiClient:
                 )
             )
         return tuple(networks)
+
+    def _parse_cpu_cores(self, rows: list[str]) -> tuple[TerraMasterCpuCore, ...]:
+        cores: list[TerraMasterCpuCore] = []
+        active_names: set[str] = set()
+        for row in rows:
+            name, separator, counters = row.partition(" ")
+            if not separator or not name.startswith("cpu"):
+                continue
+            active_names.add(name)
+            previous = self._previous_cpu_cores.get(name)
+            current, usage = _cpu_sample(counters, previous)
+            if current is None:
+                continue
+            self._previous_cpu_cores[name] = current
+            cores.append(TerraMasterCpuCore(name=name, usage=usage))
+        self._previous_cpu_cores = {
+            name: sample
+            for name, sample in self._previous_cpu_cores.items()
+            if name in active_names
+        }
+        return tuple(cores)
+
+    @staticmethod
+    def _parse_shares(rows: list[str]) -> tuple[TerraMasterShare, ...]:
+        shares: list[TerraMasterShare] = []
+        for row in rows:
+            parts = row.split("|", 5)
+            if len(parts) != 6 or not parts[0]:
+                continue
+            name, path, device, share_type, hidden, recycle_bin = parts
+            shares.append(
+                TerraMasterShare(
+                    name=name,
+                    path=path,
+                    device=device,
+                    share_type=share_type,
+                    hidden=hidden == "1",
+                    recycle_bin=recycle_bin == "1",
+                )
+            )
+        return tuple(sorted(shares, key=lambda share: share.name.casefold()))
+
+    def _parse_services(
+        self, rows: list[str], listeners_available: bool
+    ) -> tuple[TerraMasterService, ...]:
+        detected: dict[str, tuple[set[int], set[str]]] = {}
+        process_names = {"ssh": "sshd", "telnet": "telnetd", "snmp": "snmpd"}
+        for row in rows:
+            parts = row.split("|", 2)
+            if len(parts) != 3:
+                continue
+            protocol, address, process = parts
+            port = as_int(address.rpartition(":")[2])
+            if port is None:
+                continue
+            for service_name, process_name in process_names.items():
+                if process_name in process.lower():
+                    ports, protocols = detected.setdefault(service_name, (set(), set()))
+                    ports.add(port)
+                    protocols.add(protocol.rstrip("6"))
+
+        ssh_ports, ssh_protocols = detected.setdefault("ssh", (set(), set()))
+        ssh_ports.add(self._port)
+        ssh_protocols.add("tcp")
+        return tuple(
+            TerraMasterService(
+                name=name,
+                enabled=(name in detected)
+                if listeners_available or name == "ssh"
+                else None,
+                ports=tuple(sorted(detected.get(name, (set(), set()))[0])),
+                protocols=tuple(sorted(detected.get(name, (set(), set()))[1])),
+            )
+            for name in ("ssh", "telnet", "snmp")
+        )
 
     @staticmethod
     def _parse_physical_disks(
@@ -425,24 +653,10 @@ class TerraMasterApiClient:
     def _calculate_cpu(self, value: str | None) -> float | None:
         if not value:
             return None
-        try:
-            counters = [int(part) for part in value.split()]
-        except ValueError:
-            return None
-        if len(counters) < 4:
-            return None
-        idle = counters[3] + (counters[4] if len(counters) > 4 else 0)
-        total = sum(counters)
-        previous, self._previous_cpu = self._previous_cpu, (total, idle)
-        if previous is None:
-            return None
-        total_delta = total - previous[0]
-        idle_delta = idle - previous[1]
-        if total_delta <= 0:
-            return None
-        return round(
-            max(0.0, min(100.0, 100 * (total_delta - idle_delta) / total_delta)), 1
-        )
+        current, usage = _cpu_sample(value, self._previous_cpu)
+        if current is not None:
+            self._previous_cpu = current
+        return usage
 
     @staticmethod
     def _calculate_disk_usage(
@@ -456,6 +670,31 @@ class TerraMasterApiClient:
         total = sum(item[0] for item in unique.values())
         used = sum(item[1] for item in unique.values())
         return percentage(used, total)
+
+
+def _cpu_sample(
+    value: str, previous: tuple[int, int] | None
+) -> tuple[tuple[int, int] | None, float | None]:
+    """Parse CPU counters and calculate utilization since the previous sample."""
+    try:
+        counters = [int(part) for part in value.split()]
+    except ValueError:
+        return None, None
+    if len(counters) < 4:
+        return None, None
+    idle = counters[3] + (counters[4] if len(counters) > 4 else 0)
+    total = sum(counters)
+    current = (total, idle)
+    if previous is None:
+        return current, None
+    total_delta = total - previous[0]
+    idle_delta = idle - previous[1]
+    if total_delta <= 0:
+        return current, None
+    usage = round(
+        max(0.0, min(100.0, 100 * (total_delta - idle_delta) / total_delta)), 1
+    )
+    return current, usage
 
 
 def _to_text(value: bytes | str | None) -> str:

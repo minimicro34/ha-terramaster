@@ -19,10 +19,17 @@
   "entity": {
     "sensor": {
       "model": {"name": "Model"},
+      "platform": {"name": "Hardware platform"},
       "tos_version": {"name": "TOS version"},
+      "linux_distribution": {"name": "Linux distribution"},
+      "kernel_version": {"name": "Linux kernel version"},
       "uptime": {"name": "Uptime"},
       "last_restart": {"name": "Last restart"},
+      "cpu_model": {"name": "Processor"},
       "cpu_usage": {"name": "CPU usage"},
+      "cpu_core_usage": {"name": "CPU core {core}"},
+      "memory_total": {"name": "Total memory"},
+      "memory_available": {"name": "Available memory"},
       "memory_usage": {"name": "Memory usage"},
       "temperature": {"name": "Temperature"},
       "disk_usage": {"name": "Disk usage"},
@@ -54,7 +61,9 @@
       "received_data": {"name": "Received data"},
       "sent_data": {"name": "Sent data"},
       "receive_rate": {"name": "Receive rate"},
-      "transmit_rate": {"name": "Transmit rate"}
+      "transmit_rate": {"name": "Transmit rate"},
+      "service_status": {"name": "{service} service", "state": {"enabled": "Enabled", "disabled": "Disabled"}},
+      "shared_folder": {"name": "Shared folder {share}"}
     }
   }
 }

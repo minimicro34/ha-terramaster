@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import asdict
 from typing import Any
 
-from homeassistant.components.diagnostics import async_redact_data
+from homeassistant.components.diagnostics import REDACTED, async_redact_data
 from homeassistant.core import HomeAssistant
 
 from . import TerraMasterConfigEntry
@@ -18,8 +18,12 @@ async def async_get_config_entry_diagnostics(
     hass: HomeAssistant, entry: TerraMasterConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry."""
+    coordinator_data = asdict(entry.runtime_data.data)
+    for share in coordinator_data["shares"]:
+        share["name"] = REDACTED
+        share["path"] = REDACTED
     return {
         "config_entry": async_redact_data(dict(entry.data), TO_REDACT),
-        "data": asdict(entry.runtime_data.data),
+        "data": coordinator_data,
         "last_update_success": entry.runtime_data.last_update_success,
     }

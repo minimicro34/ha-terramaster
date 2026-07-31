@@ -9,9 +9,12 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.terramaster.const import DOMAIN
 from custom_components.terramaster.coordinator import TerraMasterDataUpdateCoordinator
 from custom_components.terramaster.models import (
+    TerraMasterCpuCore,
     TerraMasterData,
     TerraMasterDisk,
     TerraMasterRaid,
+    TerraMasterService,
+    TerraMasterShare,
     TerraMasterVolume,
 )
 from custom_components.terramaster.sensor import async_setup_entry
@@ -22,10 +25,16 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
     data = TerraMasterData(
         hostname="NAS-NICO",
         model="F2-221",
+        platform="Realtek_RTD1296",
         tos_version="4.2",
+        linux_distribution="OpenWrt Chaos Calmer 15.05.1",
+        kernel_version="4.4.18",
         uptime=86400,
         boot_time=1785350000,
+        cpu_model="ARMv8 Processor rev 4",
         cpu_usage=10.0,
+        memory_total=1_000_000_000,
+        memory_available=600_000_000,
         memory_usage=40.0,
         temperature=42.0,
         disk_usage=46.0,
@@ -74,6 +83,29 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
                 usage=46.0,
             ),
         ),
+        cpu_cores=(
+            TerraMasterCpuCore(name="cpu0", usage=12.5),
+            TerraMasterCpuCore(name="cpu1", usage=25.0),
+        ),
+        shares=(
+            TerraMasterShare(
+                name="public",
+                path="/mnt/md0/public",
+                device="/dev/mapper/vg0-lv0",
+                share_type="public",
+                hidden=False,
+                recycle_bin=True,
+            ),
+        ),
+        services=(
+            TerraMasterService(
+                name="ssh", enabled=True, ports=(9222,), protocols=("tcp",)
+            ),
+            TerraMasterService(
+                name="telnet", enabled=True, ports=(23,), protocols=("tcp",)
+            ),
+            TerraMasterService(name="snmp", enabled=False, ports=(), protocols=()),
+        ),
     )
     coordinator = TerraMasterDataUpdateCoordinator(hass, Mock())
     coordinator.async_set_updated_data(data)
@@ -103,5 +135,22 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         assert "DISK sdb" in device_names
         assert "RAID md0" in device_names
         assert "VOLUME vg0-lv0" in device_names
+        assert not any(name.startswith("SHARE") for name in device_names)
+        assert (
+            sum(
+                entity.unique_id.endswith(("cpu0_usage", "cpu1_usage"))
+                for entity in entities
+                if entity.unique_id is not None
+            )
+            == 2
+        )
+        share_entity = next(
+            entity
+            for entity in entities
+            if entity.unique_id is not None
+            and entity.unique_id.endswith("share_public")
+        )
+        assert share_entity.device_info["name"] == "NAS-NICO"
+        assert share_entity.native_value == "/mnt/md0/public"
     finally:
         await coordinator.async_shutdown()

@@ -74,15 +74,51 @@ class TerraMasterNetwork:
 
 
 @dataclass(frozen=True, slots=True)
+class TerraMasterCpuCore:
+    """A logical CPU core and its current utilization."""
+
+    name: str
+    usage: float | None
+
+
+@dataclass(frozen=True, slots=True)
+class TerraMasterShare:
+    """A shared folder configured in TOS."""
+
+    name: str
+    path: str
+    device: str
+    share_type: str
+    hidden: bool
+    recycle_bin: bool
+
+
+@dataclass(frozen=True, slots=True)
+class TerraMasterService:
+    """A network management service exposed by TOS."""
+
+    name: str
+    enabled: bool | None
+    ports: tuple[int, ...]
+    protocols: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class TerraMasterData:
     """A snapshot of TerraMaster system data."""
 
     hostname: str
     model: str | None
+    platform: str | None
     tos_version: str | None
+    linux_distribution: str | None
+    kernel_version: str | None
     uptime: int | None
     boot_time: int | None
+    cpu_model: str | None
     cpu_usage: float | None
+    memory_total: int | None
+    memory_available: int | None
     memory_usage: float | None
     temperature: float | None
     disk_usage: float | None
@@ -90,3 +126,6 @@ class TerraMasterData:
     raids: tuple[TerraMasterRaid, ...] = ()
     volumes: tuple[TerraMasterVolume, ...] = ()
     networks: tuple[TerraMasterNetwork, ...] = ()
+    cpu_cores: tuple[TerraMasterCpuCore, ...] = ()
+    shares: tuple[TerraMasterShare, ...] = ()
+    services: tuple[TerraMasterService, ...] = ()

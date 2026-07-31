@@ -19,10 +19,17 @@
   "entity": {
     "sensor": {
       "model": {"name": "Modèle"},
+      "platform": {"name": "Plateforme matérielle"},
       "tos_version": {"name": "Version de TOS"},
+      "linux_distribution": {"name": "Distribution Linux"},
+      "kernel_version": {"name": "Version du noyau Linux"},
       "uptime": {"name": "Durée de fonctionnement"},
       "last_restart": {"name": "Dernier redémarrage"},
+      "cpu_model": {"name": "Processeur"},
       "cpu_usage": {"name": "Utilisation du processeur"},
+      "cpu_core_usage": {"name": "Cœur processeur {core}"},
+      "memory_total": {"name": "Mémoire totale"},
+      "memory_available": {"name": "Mémoire disponible"},
       "memory_usage": {"name": "Utilisation de la mémoire"},
       "temperature": {"name": "Température"},
       "disk_usage": {"name": "Utilisation des disques"},
@@ -54,7 +61,9 @@
       "received_data": {"name": "Données reçues"},
       "sent_data": {"name": "Données envoyées"},
       "receive_rate": {"name": "Débit entrant"},
-      "transmit_rate": {"name": "Débit sortant"}
+      "transmit_rate": {"name": "Débit sortant"},
+      "service_status": {"name": "Service {service}", "state": {"enabled": "Activé", "disabled": "Désactivé"}},
+      "shared_folder": {"name": "Dossier partagé {share}"}
     }
   }
 }
