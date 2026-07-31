@@ -28,7 +28,8 @@
     },
     "abort": {
       "already_configured": "This TerraMaster is already configured",
-      "reauth_successful": "Reauthentication was successful"
+      "reauth_successful": "Reauthentication was successful",
+      "reauth_entry_missing": "The configuration entry no longer exists"
     }
   },
   "entity": {
@@ -36,10 +37,34 @@
       "model": {"name": "Model"},
       "tos_version": {"name": "TOS version"},
       "uptime": {"name": "Uptime"},
+      "last_restart": {"name": "Last restart"},
       "cpu_usage": {"name": "CPU usage"},
       "memory_usage": {"name": "Memory usage"},
       "temperature": {"name": "Temperature"},
-      "disk_usage": {"name": "Disk usage"}
+      "disk_usage": {"name": "Disk usage"},
+      "disk_model": {"name": "Model"},
+      "capacity": {"name": "Capacity"},
+      "state": {"name": "State"},
+      "smart_status": {"name": "SMART status"},
+      "power_on_time": {"name": "Power-on time"},
+      "power_cycles": {"name": "Power cycles"},
+      "start_stop_cycles": {"name": "Start/stop cycles"},
+      "load_cycles": {"name": "Load cycles"},
+      "spin_retries": {"name": "Spin retries"},
+      "reallocated_sectors": {"name": "Reallocated sectors"},
+      "reallocated_events": {"name": "Reallocation events"},
+      "pending_sectors": {"name": "Pending sectors"},
+      "offline_uncorrectable": {"name": "Offline uncorrectable sectors"},
+      "udma_crc_errors": {"name": "UDMA CRC errors"},
+      "raid_level": {"name": "RAID level"},
+      "degraded_devices": {"name": "Degraded devices"},
+      "sync_action": {"name": "Synchronization action"},
+      "sync_progress": {"name": "Synchronization progress"},
+      "filesystem": {"name": "Filesystem"},
+      "mountpoint": {"name": "Mount point"},
+      "used_space": {"name": "Used space"},
+      "available_space": {"name": "Available space"},
+      "storage_role": {"name": "Storage role"}
     }
   }
 }

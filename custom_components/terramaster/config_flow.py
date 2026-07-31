@@ -6,8 +6,8 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant import config_entries
+from homeassistant.config_entries import ConfigEntry, ConfigFlowResult
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import selector
 
 from .api import (
@@ -23,10 +23,11 @@ class TerraMasterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     """Handle a config flow for TerraMaster."""
 
     VERSION = 1
+    _reauth_entry: ConfigEntry
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Handle initial setup."""
         errors: dict[str, str] = {}
         if user_input is not None:
@@ -55,16 +56,17 @@ class TerraMasterConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_reauth(self, entry_data: dict[str, Any]) -> FlowResult:
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
         """Start reauthentication."""
-        self._reauth_entry = self.hass.config_entries.async_get_entry(
-            self.context["entry_id"]
-        )
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        if entry is None:
+            return self.async_abort(reason="reauth_entry_missing")
+        self._reauth_entry = entry
         return await self.async_step_reauth_confirm()
 
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
+    ) -> ConfigFlowResult:
         """Confirm new credentials."""
         errors: dict[str, str] = {}
         if user_input is not None:

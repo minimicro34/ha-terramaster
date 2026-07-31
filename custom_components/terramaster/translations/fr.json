@@ -14,17 +14,41 @@
       }
     },
     "error": {"cannot_connect": "Échec de la connexion", "invalid_auth": "Authentification incorrecte", "unknown": "Erreur inattendue"},
-    "abort": {"already_configured": "Ce TerraMaster est déjà configuré", "reauth_successful": "La réauthentification a réussi"}
+    "abort": {"already_configured": "Ce TerraMaster est déjà configuré", "reauth_successful": "La réauthentification a réussi", "reauth_entry_missing": "L’entrée de configuration n’existe plus"}
   },
   "entity": {
     "sensor": {
       "model": {"name": "Modèle"},
       "tos_version": {"name": "Version de TOS"},
       "uptime": {"name": "Durée de fonctionnement"},
+      "last_restart": {"name": "Dernier redémarrage"},
       "cpu_usage": {"name": "Utilisation du processeur"},
       "memory_usage": {"name": "Utilisation de la mémoire"},
       "temperature": {"name": "Température"},
-      "disk_usage": {"name": "Utilisation des disques"}
+      "disk_usage": {"name": "Utilisation des disques"},
+      "disk_model": {"name": "Modèle"},
+      "capacity": {"name": "Capacité"},
+      "state": {"name": "État"},
+      "smart_status": {"name": "État SMART"},
+      "power_on_time": {"name": "Durée de fonctionnement"},
+      "power_cycles": {"name": "Cycles d’alimentation"},
+      "start_stop_cycles": {"name": "Cycles démarrage/arrêt"},
+      "load_cycles": {"name": "Cycles de chargement"},
+      "spin_retries": {"name": "Tentatives de rotation"},
+      "reallocated_sectors": {"name": "Secteurs réalloués"},
+      "reallocated_events": {"name": "Événements de réallocation"},
+      "pending_sectors": {"name": "Secteurs en attente"},
+      "offline_uncorrectable": {"name": "Secteurs non corrigeables"},
+      "udma_crc_errors": {"name": "Erreurs CRC UDMA"},
+      "raid_level": {"name": "Niveau RAID"},
+      "degraded_devices": {"name": "Disques dégradés"},
+      "sync_action": {"name": "Action de synchronisation"},
+      "sync_progress": {"name": "Progression de la synchronisation"},
+      "filesystem": {"name": "Système de fichiers"},
+      "mountpoint": {"name": "Point de montage"},
+      "used_space": {"name": "Espace utilisé"},
+      "available_space": {"name": "Espace disponible"},
+      "storage_role": {"name": "Rôle du stockage"}
     }
   }
 }
