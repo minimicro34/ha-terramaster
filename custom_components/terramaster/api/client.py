@@ -1,16 +1,40 @@
-"""SSH API client for TerraMaster TOS 4."""
+"""Sensor platform for TerraMaster TOS."""
 
 from __future__ import annotations
 
-import asyncio
-import logging
-import shlex
-import time
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from functools import partial
 from typing import Any
 
-import asyncssh
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_USERNAME,
+    PERCENTAGE,
+    UnitOfDataRate,
+    UnitOfInformation,
+    UnitOfTemperature,
+    UnitOfTime,
+)
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import DeviceInfo
+from homeassistant.helpers.entity import EntityCategory
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
+from homeassistant.helpers.network import NoURLAvailableError, get_url
+from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from ..models import (
+from . import TerraMasterConfigEntry
+from .const import CONF_SHARE_TOKEN, DOMAIN
+from .coordinator import TerraMasterDataUpdateCoordinator
+from .models import (
     TerraMasterCpuCore,
     TerraMasterData,
     TerraMasterDisk,
@@ -20,787 +44,1174 @@ from ..models import (
     TerraMasterShare,
     TerraMasterVolume,
 )
-from .exceptions import (
-    TerraMasterAuthenticationError,
-    TerraMasterCommandError,
-    TerraMasterConnectionError,
-    TerraMasterHostKeyError,
+from .share import resolve_share_storage, share_connection_urls, share_page_url
+
+
+@dataclass(frozen=True, kw_only=True)
+class TerraMasterSensorEntityDescription(SensorEntityDescription):
+    """Describe a TerraMaster sensor."""
+
+    value_fn: Callable[[TerraMasterData], Any]
+
+
+SENSORS: tuple[TerraMasterSensorEntityDescription, ...] = (
+    TerraMasterSensorEntityDescription(
+        key="model",
+        translation_key="model",
+        icon="mdi:nas",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.model,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="platform",
+        translation_key="platform",
+        icon="mdi:developer-board",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.platform,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="tos_version",
+        translation_key="tos_version",
+        icon="mdi:package-up",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.tos_version,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="linux_distribution",
+        translation_key="linux_distribution",
+        icon="mdi:linux",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.linux_distribution,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="kernel_version",
+        translation_key="kernel_version",
+        icon="mdi:linux",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.kernel_version,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="uptime",
+        translation_key="uptime",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.DAYS,
+        suggested_unit_of_measurement=UnitOfTime.DAYS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=1,
+        value_fn=lambda data: (
+            round(data.uptime / 86400, 2) if data.uptime is not None else None
+        ),
+    ),
+    TerraMasterSensorEntityDescription(
+        key="last_restart",
+        translation_key="last_restart",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: (
+            datetime.fromtimestamp(data.boot_time, tz=UTC)
+            if data.boot_time is not None
+            else None
+        ),
+    ),
+    TerraMasterSensorEntityDescription(
+        key="cpu_model",
+        translation_key="cpu_model",
+        icon="mdi:chip",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda data: data.cpu_model,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="cpu_usage",
+        translation_key="cpu_usage",
+        icon="mdi:cpu-64-bit",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda data: data.cpu_usage,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="memory_total",
+        translation_key="memory_total",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        value_fn=lambda data: data.memory_total,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="memory_available",
+        translation_key="memory_available",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda data: data.memory_available,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="memory_usage",
+        translation_key="memory_usage",
+        icon="mdi:memory",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda data: data.memory_usage,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="temperature",
+        translation_key="temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda data: data.temperature,
+    ),
+    TerraMasterSensorEntityDescription(
+        key="disk_usage",
+        translation_key="disk_usage",
+        icon="mdi:harddisk",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        suggested_display_precision=1,
+        value_fn=lambda data: data.disk_usage,
+    ),
 )
-from .parsers import (
-    MD_HEADER,
-    MD_MEMBER,
-    MD_STATUS,
-    SMART_ATTRIBUTE,
-    as_float,
-    as_int,
-    percentage,
-    sync_progress,
-)
-
-_LOGGER = logging.getLogger(__name__)
 
 
-_COLLECT_COMMAND = r"""
-set -u
-first_file() {
-    for file in "$@"; do
-        if [ -r "$file" ]; then
-            head -n 1 "$file" 2>/dev/null
-            return
-        fi
-    done
-}
-printf 'hostname='; hostname 2>/dev/null || uname -n
-model=''
-if command -v getmodel >/dev/null 2>&1; then
-    model=$(getmodel 2>/dev/null)
-elif [ -x /sbin/getmodel ]; then
-    model=$(/sbin/getmodel 2>/dev/null)
-fi
-[ "$model" = "---" ] && model=''
-if [ -z "$model" ]; then
-    model_candidate=$(first_file /sys/class/dmi/id/product_name \
-        /etc/terramaster/model)
-    case "$model_candidate" in *-*) model=$model_candidate ;; esac
-fi
-printf 'model=%s\n' "$model"
-platform=$(first_file /etc/model /proc/device-tree/model \
-    /tmp/sysinfo/model /tmp/sysinfo/board_name)
-printf 'platform=%s\n' "$platform"
-tos_version=''
-for file in /usr/www/version /etc/version /etc/TOS_VERSION /etc/tos_version \
-    /etc/tos-version /etc/tos-release /etc/TOS_RELEASE \
-    /etc/tnas_version /etc/terramaster/version /etc/base/*version* \
-    /etc/base/*release* /usr/local/etc/version /usr/www/*version* \
-    /usr/www/include/*version* /usr/www/inc/*version*; do
-    [ -r "$file" ] || continue
-    tos_version=$(awk \
-        'match($0, /[0-9]+\.[0-9]+\.[0-9]+([-._][0-9]+)?/) \
-        {print substr($0, RSTART, RLENGTH); exit}' "$file" 2>/dev/null)
-    [ -n "$tos_version" ] && break
-done
-printf 'tos_version=%s\n' "$tos_version"
-linux_distribution=''
-if [ -r /etc/os-release ]; then
-    linux_distribution=$(awk -F= '/^PRETTY_NAME=/ {
-        sub(/^[^=]*=/, ""); gsub(/"/, ""); print; exit
-    }' /etc/os-release)
-fi
-if [ -z "$linux_distribution" ] && [ -r /etc/openwrt_release ]; then
-    linux_distribution=$(awk -F= '/^DISTRIB_DESCRIPTION=/ {
-        sub(/^[^=]*=/, ""); gsub(/\047/, ""); print; exit
-    }' /etc/openwrt_release)
-fi
-printf 'linux_distribution=%s\n' "$linux_distribution"
-printf 'kernel_version='; uname -r 2>/dev/null
-printf 'uptime='; cut -d. -f1 /proc/uptime 2>/dev/null
-printf 'boot_time='; awk '/^btime / {print $2}' /proc/stat
-printf 'mem_total='; awk '/^MemTotal:/ {print $2}' /proc/meminfo
-printf 'mem_available='; awk '/^MemAvailable:/ {print $2}' /proc/meminfo
-if ! grep -q '^MemAvailable:' /proc/meminfo; then
-    printf 'mem_available='
-    awk '/^MemFree:|^Buffers:|^Cached:/ {sum += $2} END {print sum}' \
-        /proc/meminfo
-fi
-cpu_model=$(awk -F: \
-    '/^(model name|Processor|Hardware)[[:space:]]*:/ {
-        sub(/^[[:space:]]+/, "", $2); print $2; exit
-    }' /proc/cpuinfo 2>/dev/null)
-if [ -z "$cpu_model" ]; then
-    cpu_implementer=$(awk -F: '/^CPU implementer/ {
-        gsub(/[[:space:]]/, "", $2); print tolower($2); exit
-    }' /proc/cpuinfo 2>/dev/null)
-    cpu_part=$(awk -F: '/^CPU part/ {
-        gsub(/[[:space:]]/, "", $2); print tolower($2); exit
-    }' /proc/cpuinfo 2>/dev/null)
-    case "$cpu_implementer:$cpu_part" in
-        0x41:0xd03) cpu_model='ARM Cortex-A53' ;;
-        0x41:0xd04) cpu_model='ARM Cortex-A35' ;;
-        0x41:0xd05) cpu_model='ARM Cortex-A55' ;;
-        0x41:0xd07) cpu_model='ARM Cortex-A57' ;;
-        0x41:0xd08) cpu_model='ARM Cortex-A72' ;;
-        0x41:0xd09) cpu_model='ARM Cortex-A73' ;;
-        0x41:0xd0a) cpu_model='ARM Cortex-A75' ;;
-        0x41:0xd0b) cpu_model='ARM Cortex-A76' ;;
-        0x41:0xd41) cpu_model='ARM Cortex-A78' ;;
-    esac
-fi
-[ -z "$cpu_model" ] && cpu_model=$(uname -m 2>/dev/null)
-printf 'cpu_model=%s\n' "$cpu_model"
-printf 'cpu='; awk '/^cpu / {print $2,$3,$4,$5,$6,$7,$8,$9}' /proc/stat
-awk '/^cpu[0-9]+ / {
-    printf "cpu_core=%s", $1
-    for (field = 2; field <= 9; field++) printf " %s", $field
-    print ""
-}' /proc/stat
-temperature=''
-for file in /sys/class/thermal/thermal_zone*/temp \
-    /sys/class/hwmon/hwmon*/temp*_input; do
-    if [ -r "$file" ]; then
-        value=$(head -n 1 "$file" 2>/dev/null)
-        [ -n "$value" ] && { temperature=$value; break; }
-    fi
-done
-printf 'temperature=%s\n' "$temperature"
-df -Pk 2>/dev/null | awk \
-    'NR > 1 && $1 ~ "^/dev/" {print "disk=" $1 " " $2 " " $3 " " $6}'
-lsblk -b -P -o NAME,KNAME,TYPE,SIZE,MODEL,SERIAL,FSTYPE,MOUNTPOINT 2>/dev/null | \
-    while IFS= read -r line; do printf 'lsblk=%s\n' "$line"; done
-df -PT -k 2>/dev/null | awk \
-    'NR > 1 {print "filesystem=" $1 "|" $2 "|" $3 "|" $4 "|" $5 "|" $7}'
-while IFS= read -r line; do printf 'mdstat=%s\n' "$line"; done < /proc/mdstat
-for md_path in /sys/block/md*; do
-    [ -d "$md_path/md" ] || continue
-    md_name=${md_path##*/}
-    level=$(cat "$md_path/md/level" 2>/dev/null)
-    state=$(cat "$md_path/md/array_state" 2>/dev/null)
-    degraded=$(cat "$md_path/md/degraded" 2>/dev/null)
-    action=$(cat "$md_path/md/sync_action" 2>/dev/null)
-    completed=$(cat "$md_path/md/sync_completed" 2>/dev/null)
-    printf 'raid=%s|%s|%s|%s|%s|%s\n' \
-        "$md_name" "$level" "$state" "$degraded" "$action" "$completed"
-done
-for disk_path in /sys/block/sd*; do
-    disk_name=${disk_path##*/}
-    disk_model=$(cat "$disk_path/device/model" 2>/dev/null)
-    disk_serial=$(cat "$disk_path/device/serial" 2>/dev/null)
-    disk_state=$(cat "$disk_path/device/state" 2>/dev/null)
-    disk_sectors=$(cat "$disk_path/size" 2>/dev/null)
-    printf 'physical_disk=%s|%s|%s|%s|%s\n' \
-        "$disk_name" "$disk_model" "$disk_serial" "$disk_state" "$disk_sectors"
-done
-for net_path in /sys/class/net/*; do
-    net_name=${net_path##*/}
-    case "$net_name" in lo|docker*|veth*|br-*|tun*|tap*) continue ;; esac
-    net_state=$(cat "$net_path/operstate" 2>/dev/null)
-    net_speed=$(cat "$net_path/speed" 2>/dev/null)
-    net_rx=$(cat "$net_path/statistics/rx_bytes" 2>/dev/null)
-    net_tx=$(cat "$net_path/statistics/tx_bytes" 2>/dev/null)
-    printf 'network=%s|%s|%s|%s|%s\n' \
-        "$net_name" "$net_state" "$net_speed" "$net_rx" "$net_tx"
-done
-""".strip()
-
-
-_OPTIONAL_COMMAND = r"""
-model=''
-if command -v getmodel >/dev/null 2>&1; then
-    model=$(getmodel 2>/dev/null)
-elif [ -x /sbin/getmodel ]; then
-    model=$(/sbin/getmodel 2>/dev/null)
-fi
-[ "$model" = "---" ] && model=''
-[ -n "$model" ] && printf 'model=%s\n' "$model"
-
-tos_version=''
-for file in /usr/www/version /etc/version /etc/TOS_VERSION /etc/tos_version \
-    /etc/tos-version /etc/tos-release /etc/TOS_RELEASE \
-    /etc/tnas_version /etc/terramaster/version /etc/base/*version* \
-    /etc/base/*release* /usr/local/etc/version /usr/www/*version* \
-    /usr/www/include/*version* /usr/www/inc/*version*; do
-    [ -r "$file" ] || continue
-    tos_version=$(awk \
-        'match($0, /[0-9]+\.[0-9]+\.[0-9]+([-._][0-9]+)?/) \
-        {print substr($0, RSTART, RLENGTH); exit}' "$file" 2>/dev/null)
-    [ -n "$tos_version" ] && break
-done
-[ -n "$tos_version" ] && printf 'tos_version=%s\n' "$tos_version"
-
-if command -v smartctl >/dev/null 2>&1; then
-    for disk_path in /sys/block/sd*; do
-        [ -d "$disk_path" ] || continue
-        disk_name=${disk_path##*/}
-        smart_output=$(smartctl -H -A -d sat "/dev/$disk_name" 2>&1)
-        if printf '%s\n' "$smart_output" | grep -q \
-            -e 'START OF READ SMART DATA' -e 'SMART overall-health'; then
-            printf '%s\n' "$smart_output" | while IFS= read -r smart_line; do
-                [ -n "$smart_line" ] && printf 'smart=%s|%s\n' \
-                    "$disk_name" "$smart_line"
-            done
-        fi
-    done
-fi
-
-ini_has_section() {
-    awk -v target="$2" '
-        /^[[:space:]]*\[/ {
-            section=$0
-            sub(/^[[:space:]]*\[/, "", section)
-            sub(/\][[:space:]]*.*$/, "", section)
-            if (tolower(section) == tolower(target)) found=1
-        }
-        END {exit found ? 0 : 1}
-    ' "$1" 2>/dev/null
+_SUGGESTED_UNIT_MIGRATIONS = {
+    "_uptime": UnitOfTime.DAYS,
+    "_power_on_hours": UnitOfTime.DAYS,
+    "_receive_rate": UnitOfDataRate.MEGABITS_PER_SECOND,
+    "_transmit_rate": UnitOfDataRate.MEGABITS_PER_SECOND,
+    "_received_bytes": UnitOfInformation.GIGABYTES,
+    "_sent_bytes": UnitOfInformation.GIGABYTES,
 }
 
-nfs_exports_path() {
-    awk -v target="$2" '
-        /^[[:space:]]*#/ || NF == 0 {next}
-        {
-            path=$1
-            gsub(/\\040/, " ", path)
-            if (path == target) found=1
-        }
-        END {exit found ? 0 : 1}
-    ' "$1" 2>/dev/null
-}
 
-nfs_server_running() {
-    for process in rpc.mountd rpc.nfsd mountd nfsd; do
-        pidof "$process" >/dev/null 2>&1 && return 0
-    done
-    [ -r /proc/fs/nfsd/versions ] && \
-        grep -Eq '\+[234](\.|[[:space:]]|$)' /proc/fs/nfsd/versions 2>/dev/null
-}
+def _migrate_registry_defaults(hass: HomeAssistant) -> None:
+    """Migrate integration defaults without overriding user-selected units."""
+    registry = er.async_get(hass)
 
-nfs_share_exported() {
-    target=$1
-    for exports_file in /etc/exports /var/lib/nfs/etab /etc/exports.d/*; do
-        [ -r "$exports_file" ] || continue
-        nfs_exports_path "$exports_file" "$target" && return 0
-    done
-    if command -v exportfs >/dev/null 2>&1; then
-        exportfs -v 2>/dev/null | awk -v target="$target" '
-            /^[[:space:]]*\/[^[:space:]]*/ {
-                path=$1
-                gsub(/\\040/, " ", path)
-                if (path == target) found=1
-            }
-            END {exit found ? 0 : 1}
-        '
-        return $?
-    fi
-    return 1
-}
+    for registry_entry in list(registry.entities.values()):
+        if registry_entry.platform != DOMAIN:
+            continue
 
-if command -v sqlite3 >/dev/null 2>&1 && [ -r /etc/base/nasdb ]; then
-    sqlite3 -separator '|' /etc/base/nasdb \
-        'SELECT foldername,mntpath,device,type,hidden,recycle FROM share;' \
-        2>/dev/null | while IFS='|' read -r share_name share_path \
-            share_device share_type share_hidden share_recycle; do
-        share_protocols=''
-        if pidof smbd >/dev/null 2>&1 && [ -r /etc/samba/smb.conf ] && \
-            ini_has_section /etc/samba/smb.conf "$share_name"; then
-            share_protocols='smb'
-        fi
-        if nfs_server_running && nfs_share_exported "$share_path"; then
-            [ -n "$share_protocols" ] && share_protocols="$share_protocols,nfs" || \
-                share_protocols='nfs'
-        fi
-        if pidof netatalk >/dev/null 2>&1 && [ -r /etc/afp.conf ] && \
-            ini_has_section /etc/afp.conf "$share_name"; then
-            [ -n "$share_protocols" ] && share_protocols="$share_protocols,afp" || \
-                share_protocols='afp'
-        fi
-        printf 'share=%s|%s|%s|%s|%s|%s|%s\n' "$share_name" "$share_path" \
-            "$share_device" "$share_type" "$share_hidden" "$share_recycle" \
-            "$share_protocols"
-    done
-fi
+        if (
+            registry_entry.unique_id.endswith("_memory_total")
+            and registry_entry.entity_category == EntityCategory.DIAGNOSTIC
+        ):
+            registry.async_update_entity(
+                registry_entry.entity_id,
+                entity_category=None,
+            )
 
-if command -v netstat >/dev/null 2>&1; then
-    printf 'listeners_available=1\n'
-    netstat -lntup 2>/dev/null | awk \
-        'NR > 2 && ($1 ~ /^tcp/ || $1 ~ /^udp/) \
-        {print "listener=" $1 "|" $4 "|" $NF}'
-fi
-""".strip()
+        if "unit_of_measurement" in registry_entry.options.get("sensor", {}):
+            continue
+
+        private_options: Mapping[str, Any] = registry_entry.options.get(
+            "sensor.private",
+            {},
+        )
+        current_unit = private_options.get("suggested_unit_of_measurement")
+
+        for suffix, new_unit in _SUGGESTED_UNIT_MIGRATIONS.items():
+            if registry_entry.unique_id.endswith(suffix) and current_unit != new_unit:
+                registry.async_update_entity_options(
+                    registry_entry.entity_id,
+                    "sensor.private",
+                    {"suggested_unit_of_measurement": new_unit},
+                )
+                break
 
 
-class TerraMasterApiClient:
-    """Read TerraMaster system data over SSH."""
+def _get_home_assistant_url(hass: HomeAssistant) -> str | None:
+    """Return an external or internal Home Assistant URL."""
+    try:
+        return get_url(hass, prefer_external=True)
+    except NoURLAvailableError:
+        try:
+            return get_url(hass, prefer_external=False)
+        except NoURLAvailableError:
+            return None
+
+
+def _nas_device_info(
+    coordinator: TerraMasterDataUpdateCoordinator,
+    entry: TerraMasterConfigEntry,
+) -> DeviceInfo:
+    """Return the common device information for the main NAS."""
+    nas_id = entry.unique_id or entry.entry_id
+
+    device_info = DeviceInfo(
+        identifiers={(DOMAIN, nas_id)},
+        name=coordinator.data.hostname,
+        manufacturer="TerraMaster",
+        model=coordinator.data.model,
+        sw_version=coordinator.data.tos_version,
+    )
+
+    share_token = entry.data.get(CONF_SHARE_TOKEN)
+    base_url = _get_home_assistant_url(coordinator.hass)
+
+    if (
+        base_url is not None
+        and isinstance(share_token, str)
+        and share_token
+    ):
+        device_info["configuration_url"] = share_page_url(
+            base_url,
+            entry.entry_id,
+            share_token,
+        )
+
+    return device_info
+
+
+async def async_setup_entry(
+    hass: HomeAssistant,
+    entry: TerraMasterConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
+) -> None:
+    """Set up TerraMaster sensors."""
+    _migrate_registry_defaults(hass)
+
+    async_add_entities(
+        TerraMasterSensor(entry.runtime_data, entry, description)
+        for description in SENSORS
+    )
+
+    async_add_entities(
+        [
+            TerraMasterSharesPageSensor(
+                entry.runtime_data,
+                entry,
+            )
+        ]
+    )
+
+    async_add_entities(
+        TerraMasterServiceSensor(entry.runtime_data, entry, service_name)
+        for service_name in ("ssh", "telnet", "snmp")
+    )
+
+    known: set[tuple[str, str, str]] = set()
+    known_cpu_cores: set[str] = set()
+    known_shares: set[str] = set()
+
+    def async_discover_entities() -> None:
+        entities: list[SensorEntity] = []
+
+        for share in entry.runtime_data.data.shares:
+            if share.name not in known_shares:
+                known_shares.add(share.name)
+                entities.append(
+                    TerraMasterShareSensor(
+                        entry.runtime_data,
+                        entry,
+                        share.name,
+                    )
+                )
+
+        for core in entry.runtime_data.data.cpu_cores:
+            if core.name not in known_cpu_cores:
+                known_cpu_cores.add(core.name)
+                entities.append(
+                    TerraMasterCpuCoreSensor(
+                        entry.runtime_data,
+                        entry,
+                        core.name,
+                    )
+                )
+
+        for kind, objects, descriptions in (
+            ("disk", entry.runtime_data.data.disks, DISK_SENSORS),
+            ("raid", entry.runtime_data.data.raids, RAID_SENSORS),
+            ("volume", entry.runtime_data.data.volumes, VOLUME_SENSORS),
+            ("network", entry.runtime_data.data.networks, NETWORK_SENSORS),
+        ):
+            for storage_object in objects:
+                for description in descriptions:
+                    key = (
+                        kind,
+                        storage_object.name,
+                        description.key,
+                    )
+
+                    if key not in known:
+                        known.add(key)
+                        entities.append(
+                            TerraMasterStorageSensor(
+                                entry.runtime_data,
+                                entry,
+                                kind,
+                                storage_object.name,
+                                description,
+                            )
+                        )
+
+        if entities:
+            async_add_entities(entities)
+
+    async_discover_entities()
+
+    entry.async_on_unload(
+        entry.runtime_data.async_add_listener(
+            async_discover_entities,
+        )
+    )
+
+
+class TerraMasterSensor(
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
+):
+    """Representation of a TerraMaster sensor."""
+
+    entity_description: TerraMasterSensorEntityDescription
+    _attr_has_entity_name = True
 
     def __init__(
         self,
-        host: str,
-        port: int,
-        username: str,
-        password: str,
-        host_key: str | None = None,
+        coordinator: TerraMasterDataUpdateCoordinator,
+        entry: TerraMasterConfigEntry,
+        description: TerraMasterSensorEntityDescription,
     ) -> None:
-        self._host = host
-        self._port = port
-        self._username = username
-        self._password = password
-        self._host_key = host_key
-        self._previous_cpu: tuple[int, int] | None = None
-        self._previous_cpu_cores: dict[str, tuple[int, int]] = {}
-        self._previous_network: dict[str, tuple[float, int, int]] = {}
-        self._sudo_optional_available: bool | None = None
-        self._clock = time.monotonic
-        self._lock = asyncio.Lock()
+        super().__init__(coordinator)
 
-    async def async_test_connection(self) -> str:
-        """Connect and return the server public key for pinning."""
-        connection = await self._async_connect(trust_on_first_use=True)
-        try:
-            key = connection.get_server_host_key()
-            if key is None:
-                raise TerraMasterHostKeyError(
-                    "The SSH server did not provide a host key"
-                )
-            return _to_text(key.export_public_key()).strip()
-        finally:
-            connection.close()
-            await connection.wait_closed()
+        self.entity_description = description
 
-    async def async_get_data(self) -> TerraMasterData:
-        """Fetch a system data snapshot."""
-        async with self._lock:
-            connection = await self._async_connect()
-            try:
-                result = await connection.run(_COLLECT_COMMAND, check=False, timeout=30)
-                if result.exit_status != 0:
-                    raise TerraMasterCommandError(
-                        _to_text(result.stderr).strip()
-                        or f"Command exited with {result.exit_status}"
-                    )
-                output = _to_text(result.stdout)
-                optional_output = await self._async_collect_optional_data(connection)
-            except (TimeoutError, asyncssh.Error, OSError) as err:
-                raise TerraMasterConnectionError(str(err)) from err
-            finally:
-                connection.close()
-                await connection.wait_closed()
+        device_id = entry.unique_id or entry.entry_id
 
-            return self._parse_output("\n".join((output, optional_output)))
-
-    async def _async_collect_optional_data(
-        self, connection: asyncssh.SSHClientConnection
-    ) -> str:
-        """Collect read-only version and SMART data with administrator access."""
-        if self._sudo_optional_available is False:
-            return ""
-
-        is_root = self._username == "root"
-        command = (
-            _OPTIONAL_COMMAND
-            if is_root
-            else f"sudo -S -p '' sh -c {shlex.quote(_OPTIONAL_COMMAND)}"
-        )
-        try:
-            result = await connection.run(
-                command,
-                input=None if is_root else f"{self._password}\n",
-                check=False,
-                timeout=30,
-            )
-        except (TimeoutError, asyncssh.Error, OSError) as err:
-            _LOGGER.debug("Optional TerraMaster metrics failed: %s", err)
-            return ""
-        if result.exit_status == 0:
-            self._sudo_optional_available = True
-            return _to_text(result.stdout)
-
-        # A failed password must not be retried every refresh: TOS temporarily
-        # blocks sudo after three failures.
-        self._sudo_optional_available = False
-        _LOGGER.debug(
-            "Optional privileged TerraMaster metrics are unavailable: %s",
-            _to_text(result.stderr).strip() or result.exit_status,
-        )
-        return ""
-
-    async def _async_connect(
-        self, *, trust_on_first_use: bool = False
-    ) -> asyncssh.SSHClientConnection:
-        known_hosts: Any = None
-        if not trust_on_first_use and self._host_key:
-            known_hosts = f"[{self._host}]:{self._port} {self._host_key}\n".encode()
-
-        try:
-            return await asyncssh.connect(
-                self._host,
-                port=self._port,
-                username=self._username,
-                password=self._password,
-                known_hosts=known_hosts,
-                client_keys=None,
-                login_timeout=20,
-                keepalive_interval=15,
-                keepalive_count_max=2,
-            )
-        except asyncssh.PermissionDenied as err:
-            raise TerraMasterAuthenticationError(str(err)) from err
-        except asyncssh.HostKeyNotVerifiable as err:
-            raise TerraMasterHostKeyError(str(err)) from err
-        except (TimeoutError, asyncssh.Error, OSError) as err:
-            raise TerraMasterConnectionError(str(err)) from err
-
-    def _parse_output(self, output: str) -> TerraMasterData:
-        values: dict[str, str] = {}
-        disks: list[tuple[str, int, int, str]] = []
-        lsblk_rows: list[dict[str, str]] = []
-        filesystems: list[str] = []
-        mdstat_lines: list[str] = []
-        raid_details: dict[str, list[str]] = {}
-        physical_disks: dict[str, list[str]] = {}
-        smart_lines: dict[str, list[str]] = {}
-        network_rows: list[str] = []
-        cpu_core_rows: list[str] = []
-        share_rows: list[str] = []
-        listener_rows: list[str] = []
-        for line in output.splitlines():
-            key, separator, value = line.partition("=")
-            if not separator:
-                continue
-            value = value.strip().strip("\x00")
-            if key == "disk":
-                parts = value.split(maxsplit=3)
-                if len(parts) == 4:
-                    try:
-                        disks.append((parts[0], int(parts[1]), int(parts[2]), parts[3]))
-                    except ValueError:
-                        _LOGGER.debug("Ignoring invalid disk row: %s", value)
-            elif key == "lsblk":
-                try:
-                    lsblk_rows.append(
-                        dict(item.split("=", 1) for item in shlex.split(value))
-                    )
-                except ValueError:
-                    _LOGGER.debug("Ignoring invalid lsblk row: %s", value)
-            elif key == "filesystem":
-                filesystems.append(value)
-            elif key == "mdstat":
-                mdstat_lines.append(value)
-            elif key == "raid":
-                parts = value.split("|", 5)
-                if len(parts) == 6:
-                    raid_details[parts[0]] = parts[1:]
-            elif key == "physical_disk":
-                parts = value.split("|", 4)
-                if len(parts) == 5:
-                    physical_disks[parts[0]] = parts[1:]
-            elif key == "smart":
-                name, separator, line = value.partition("|")
-                if separator:
-                    smart_lines.setdefault(name, []).append(line)
-            elif key == "network":
-                network_rows.append(value)
-            elif key == "cpu_core":
-                cpu_core_rows.append(value)
-            elif key == "share":
-                share_rows.append(value)
-            elif key == "listener":
-                listener_rows.append(value)
-            else:
-                values[key] = value
-
-        cpu_usage = self._calculate_cpu(values.get("cpu"))
-        memory_total_kib = as_int(values.get("mem_total"), default=0) or 0
-        memory_available_kib = as_int(values.get("mem_available"), default=0) or 0
-        memory_usage = percentage(
-            memory_total_kib - memory_available_kib, memory_total_kib
-        )
-        disk_usage = self._calculate_disk_usage(disks)
-        temperature = as_float(values.get("temperature"))
-        if temperature is not None and temperature > 1000:
-            temperature /= 1000
-
-        return TerraMasterData(
-            hostname=values.get("hostname") or self._host,
-            model=values.get("model") or None,
-            platform=values.get("platform") or None,
-            tos_version=values.get("tos_version") or None,
-            linux_distribution=values.get("linux_distribution") or None,
-            kernel_version=values.get("kernel_version") or None,
-            uptime=as_int(values.get("uptime")),
-            boot_time=as_int(values.get("boot_time")),
-            cpu_model=values.get("cpu_model") or None,
-            cpu_usage=cpu_usage,
-            memory_total=memory_total_kib * 1024 if memory_total_kib else None,
-            memory_available=(
-                memory_available_kib * 1024 if memory_available_kib else None
-            ),
-            memory_usage=memory_usage,
-            temperature=temperature,
-            disk_usage=disk_usage,
-            disks=self._parse_physical_disks(physical_disks, smart_lines),
-            raids=self._parse_raids(mdstat_lines, raid_details, lsblk_rows),
-            volumes=self._parse_volumes(filesystems),
-            networks=self._parse_networks(network_rows),
-            cpu_cores=self._parse_cpu_cores(cpu_core_rows),
-            shares=self._parse_shares(share_rows),
-            services=self._parse_services(
-                listener_rows, values.get("listeners_available") == "1"
-            ),
+        self._attr_unique_id = f"{device_id}_{description.key}"
+        self._attr_device_info = _nas_device_info(
+            coordinator,
+            entry,
         )
 
-    def _parse_networks(self, rows: list[str]) -> tuple[TerraMasterNetwork, ...]:
-        now = self._clock()
-        networks: list[TerraMasterNetwork] = []
-        for row in rows:
-            parts = row.split("|", 4)
-            if len(parts) != 5:
-                continue
-            name, state, speed_text, received_text, sent_text = parts
-            received = as_int(received_text)
-            sent = as_int(sent_text)
-            if received is None or sent is None:
-                continue
-            receive_rate: float | None = None
-            transmit_rate: float | None = None
-            if previous := self._previous_network.get(name):
-                elapsed = now - previous[0]
-                if elapsed > 0 and received >= previous[1] and sent >= previous[2]:
-                    receive_rate = round(
-                        (received - previous[1]) * 8 / elapsed / 1_000_000, 3
-                    )
-                    transmit_rate = round(
-                        (sent - previous[2]) * 8 / elapsed / 1_000_000, 3
-                    )
-            self._previous_network[name] = (now, received, sent)
-            networks.append(
-                TerraMasterNetwork(
-                    name=name,
-                    state=state or None,
-                    speed=as_int(speed_text),
-                    received_bytes=received,
-                    sent_bytes=sent,
-                    receive_rate=receive_rate,
-                    transmit_rate=transmit_rate,
-                )
-            )
-        return tuple(networks)
-
-    def _parse_cpu_cores(self, rows: list[str]) -> tuple[TerraMasterCpuCore, ...]:
-        cores: list[TerraMasterCpuCore] = []
-        active_names: set[str] = set()
-        for row in rows:
-            name, separator, counters = row.partition(" ")
-            if not separator or not name.startswith("cpu"):
-                continue
-            active_names.add(name)
-            previous = self._previous_cpu_cores.get(name)
-            current, usage = _cpu_sample(counters, previous)
-            if current is None:
-                continue
-            self._previous_cpu_cores[name] = current
-            cores.append(TerraMasterCpuCore(name=name, usage=usage))
-        self._previous_cpu_cores = {
-            name: sample
-            for name, sample in self._previous_cpu_cores.items()
-            if name in active_names
-        }
-        return tuple(cores)
-
-    @staticmethod
-    def _parse_shares(rows: list[str]) -> tuple[TerraMasterShare, ...]:
-        shares: list[TerraMasterShare] = []
-        for row in rows:
-            parts = row.split("|", 6)
-            if len(parts) not in (6, 7) or not parts[0]:
-                continue
-            name, path, device, share_type, hidden, recycle_bin = parts[:6]
-            protocols = parts[6].split(",") if len(parts) == 7 else []
-            shares.append(
-                TerraMasterShare(
-                    name=name,
-                    path=path,
-                    device=device,
-                    share_type=share_type,
-                    hidden=hidden == "1",
-                    recycle_bin=recycle_bin == "1",
-                    protocols=tuple(
-                        protocol
-                        for protocol in ("smb", "nfs", "afp")
-                        if protocol in protocols
-                    ),
-                )
-            )
-        return tuple(sorted(shares, key=lambda share: share.name.casefold()))
-
-    def _parse_services(
-        self, rows: list[str], listeners_available: bool
-    ) -> tuple[TerraMasterService, ...]:
-        detected: dict[str, tuple[set[int], set[str]]] = {}
-        process_names = {"ssh": "sshd", "telnet": "telnetd", "snmp": "snmpd"}
-        for row in rows:
-            parts = row.split("|", 2)
-            if len(parts) != 3:
-                continue
-            protocol, address, process = parts
-            port = as_int(address.rpartition(":")[2])
-            if port is None:
-                continue
-            for service_name, process_name in process_names.items():
-                if process_name in process.lower():
-                    ports, protocols = detected.setdefault(service_name, (set(), set()))
-                    ports.add(port)
-                    protocols.add(protocol.rstrip("6"))
-
-        ssh_ports, ssh_protocols = detected.setdefault("ssh", (set(), set()))
-        ssh_ports.add(self._port)
-        ssh_protocols.add("tcp")
-        return tuple(
-            TerraMasterService(
-                name=name,
-                enabled=(name in detected)
-                if listeners_available or name == "ssh"
-                else None,
-                ports=tuple(sorted(detected.get(name, (set(), set()))[0])),
-                protocols=tuple(sorted(detected.get(name, (set(), set()))[1])),
-            )
-            for name in ("ssh", "telnet", "snmp")
+    @property
+    def available(self) -> bool:
+        """Return whether this particular metric is available."""
+        return (
+            super().available
+            and self.native_value is not None
         )
 
-    @staticmethod
-    def _parse_physical_disks(
-        rows: dict[str, list[str]], smart: dict[str, list[str]]
-    ) -> tuple[TerraMasterDisk, ...]:
-        result: list[TerraMasterDisk] = []
-        for name, (model, serial, state, sectors) in sorted(rows.items()):
-            size = as_int(sectors)
-            if size is None:
-                continue
-            size_bytes = size * 512
-            is_system = size_bytes < 10_000_000_000
-            attributes: dict[int, int] = {}
-            health: str | None = None
-            for line in smart.get(name, []):
-                if "test result:" in line:
-                    health = line.rsplit(":", 1)[-1].strip().lower()
-                match = SMART_ATTRIBUTE.match(line)
-                if match:
-                    attributes[int(match.group(1))] = int(match.group(2))
-            result.append(
-                TerraMasterDisk(
-                    name=name,
-                    model=model.strip() or None,
-                    serial=serial or None,
-                    size=size_bytes,
-                    state=state or None,
-                    is_system=is_system,
-                    smart_status=health,
-                    temperature=(float(attributes[194]) if 194 in attributes else None),
-                    power_on_hours=attributes.get(9),
-                    power_cycle_count=attributes.get(12),
-                    start_stop_count=attributes.get(4),
-                    load_cycle_count=attributes.get(193),
-                    spin_retry_count=attributes.get(10),
-                    reallocated_sectors=attributes.get(5),
-                    reallocated_events=attributes.get(196),
-                    pending_sectors=attributes.get(197),
-                    offline_uncorrectable=attributes.get(198),
-                    udma_crc_errors=attributes.get(199),
-                )
-            )
-        return tuple(result)
+    @property
+    def native_value(self) -> Any:
+        """Return the current sensor value."""
+        return self.entity_description.value_fn(
+            self.coordinator.data,
+        )
 
-    @staticmethod
-    def _parse_raids(
-        lines: list[str], details: dict[str, list[str]], lsblk: list[dict[str, str]]
-    ) -> tuple[TerraMasterRaid, ...]:
-        sizes = {row.get("NAME"): as_int(row.get("SIZE")) for row in lsblk}
-        raids: list[TerraMasterRaid] = []
-        for index, line in enumerate(lines):
-            header = MD_HEADER.match(line)
-            if not header:
-                continue
-            name, level, member_text = header.groups()
-            status = MD_STATUS.search(
-                lines[index + 1] if index + 1 < len(lines) else ""
-            )
-            expected = int(status.group(1)) if status else None
-            active = int(status.group(2)) if status else None
-            detail = details.get(name, [level, None, None, None, None])
-            degraded = as_int(detail[2])
-            # md8/md9 are intentionally sparse TOS system arrays.
-            is_system = name in {"md8", "md9"}
-            if is_system and active:
-                degraded = 0
-            raids.append(
-                TerraMasterRaid(
-                    name=name,
-                    level=detail[0] or level,
-                    state=detail[1],
-                    size=sizes.get(name),
-                    members=tuple(MD_MEMBER.findall(member_text)),
-                    expected_devices=expected,
-                    active_devices=active,
-                    degraded_devices=degraded,
-                    sync_action=detail[3],
-                    sync_progress=sync_progress(detail[4]),
-                    is_system=is_system,
-                )
-            )
-        return tuple(raids)
 
-    @staticmethod
-    def _parse_volumes(lines: list[str]) -> tuple[TerraMasterVolume, ...]:
-        volumes: dict[str, TerraMasterVolume] = {}
-        for line in lines:
-            parts = line.split("|", 5)
-            if len(parts) != 6 or not parts[0].startswith("/dev/mapper/"):
-                continue
-            device, filesystem, total, used, available, mountpoint = parts
-            total_kib, used_kib, available_kib = map(int, (total, used, available))
-            volumes.setdefault(
-                device,
-                TerraMasterVolume(
-                    name=device.rsplit("/", 1)[-1],
-                    device=device,
-                    filesystem=filesystem,
-                    mountpoint=mountpoint,
-                    size=total_kib * 1024,
-                    used=used_kib * 1024,
-                    available=available_kib * 1024,
-                    usage=percentage(used_kib, total_kib) or 0,
-                ),
-            )
-        return tuple(volumes.values())
+SHARES_PAGE_SENSOR = SensorEntityDescription(
+    key="shared_folders_page",
+    translation_key="shared_folders_page",
+    icon="mdi:folder-network-outline",
+)
 
-    def _calculate_cpu(self, value: str | None) -> float | None:
-        if not value:
+
+class TerraMasterSharesPageSensor(
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
+):
+    """Link to the TerraMaster shared-folders page."""
+
+    entity_description = SHARES_PAGE_SENSOR
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: TerraMasterDataUpdateCoordinator,
+        entry: TerraMasterConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+
+        self._home_assistant = coordinator.hass
+        self._entry_id = entry.entry_id
+        self._share_token = entry.data.get(CONF_SHARE_TOKEN)
+
+        nas_id = entry.unique_id or entry.entry_id
+
+        self._attr_unique_id = f"{nas_id}_shared_folders_page"
+        self._attr_device_info = _nas_device_info(
+            coordinator,
+            entry,
+        )
+
+    def _page_url(self) -> str | None:
+        """Build the shared-folders page URL."""
+        if (
+            not isinstance(self._share_token, str)
+            or not self._share_token
+            or not self.coordinator.data.shares
+        ):
             return None
-        current, usage = _cpu_sample(value, self._previous_cpu)
-        if current is not None:
-            self._previous_cpu = current
-        return usage
 
-    @staticmethod
-    def _calculate_disk_usage(
-        disks: list[tuple[str, int, int, str]],
-    ) -> float | None:
-        # df may list bind mounts more than once. Count each block device once.
-        unique: dict[str, tuple[int, int]] = {}
-        for device, total, used, mountpoint in disks:
-            if total > 0 and not mountpoint.startswith(("/boot", "/var/", "/usr/")):
-                unique.setdefault(device, (total, used))
-        total = sum(item[0] for item in unique.values())
-        used = sum(item[1] for item in unique.values())
-        return percentage(used, total)
+        base_url = _get_home_assistant_url(
+            self._home_assistant,
+        )
+
+        if base_url is None:
+            return None
+
+        return share_page_url(
+            base_url,
+            self._entry_id,
+            self._share_token,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return whether the shared-folders page is available."""
+        return (
+            super().available
+            and self._page_url() is not None
+        )
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the shared-folders page URL."""
+        return self._page_url()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        """Return detected shared-folder information."""
+        return {
+            "share_count": len(self.coordinator.data.shares),
+            "shares": [
+                share.name
+                for share in self.coordinator.data.shares
+            ],
+        }
 
 
-def _cpu_sample(
-    value: str, previous: tuple[int, int] | None
-) -> tuple[tuple[int, int] | None, float | None]:
-    """Parse CPU counters and calculate utilization since the previous sample."""
-    try:
-        counters = [int(part) for part in value.split()]
-    except ValueError:
-        return None, None
-    if len(counters) < 4:
-        return None, None
-    idle = counters[3] + (counters[4] if len(counters) > 4 else 0)
-    total = sum(counters)
-    current = (total, idle)
-    if previous is None:
-        return current, None
-    total_delta = total - previous[0]
-    idle_delta = idle - previous[1]
-    if total_delta <= 0:
-        return current, None
-    usage = round(
-        max(0.0, min(100.0, 100 * (total_delta - idle_delta) / total_delta)), 1
+CPU_CORE_SENSOR = SensorEntityDescription(
+    key="cpu_core_usage",
+    translation_key="cpu_core_usage",
+    icon="mdi:cpu-64-bit",
+    native_unit_of_measurement=PERCENTAGE,
+    state_class=SensorStateClass.MEASUREMENT,
+    suggested_display_precision=1,
+)
+
+
+class TerraMasterCpuCoreSensor(
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
+):
+    """Utilization sensor for a dynamically discovered logical CPU core."""
+
+    entity_description = CPU_CORE_SENSOR
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: TerraMasterDataUpdateCoordinator,
+        entry: TerraMasterConfigEntry,
+        core_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+
+        self._core_name = core_name
+
+        nas_id = entry.unique_id or entry.entry_id
+        core_number = core_name.removeprefix("cpu")
+        display_number = (
+            str(int(core_number) + 1)
+            if core_number.isdigit()
+            else core_name
+        )
+
+        self._attr_unique_id = f"{nas_id}_{core_name}_usage"
+        self._attr_translation_placeholders = {
+            "core": display_number,
+        }
+        self._attr_device_info = _nas_device_info(
+            coordinator,
+            entry,
+        )
+
+    def _core(self) -> TerraMasterCpuCore | None:
+        """Return the matching CPU core."""
+        return next(
+            (
+                core
+                for core in self.coordinator.data.cpu_cores
+                if core.name == self._core_name
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return whether the core utilization sample is available."""
+        core = self._core()
+
+        return (
+            super().available
+            and core is not None
+            and core.usage is not None
+        )
+
+    @property
+    def native_value(self) -> float | None:
+        """Return the current logical CPU utilization."""
+        core = self._core()
+
+        return (
+            core.usage
+            if core is not None
+            else None
+        )
+
+
+SERVICE_SENSOR = SensorEntityDescription(
+    key="service_status",
+    translation_key="service_status",
+    device_class=SensorDeviceClass.ENUM,
+    options=["enabled", "disabled"],
+    icon="mdi:server-network",
+    entity_category=EntityCategory.DIAGNOSTIC,
+)
+
+
+class TerraMasterServiceSensor(
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
+):
+    """Status and listening ports for a TOS management service."""
+
+    entity_description = SERVICE_SENSOR
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: TerraMasterDataUpdateCoordinator,
+        entry: TerraMasterConfigEntry,
+        service_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+
+        self._service_name = service_name
+
+        nas_id = entry.unique_id or entry.entry_id
+
+        self._attr_unique_id = f"{nas_id}_{service_name}_service"
+        self._attr_translation_placeholders = {
+            "service": service_name.upper(),
+        }
+        self._attr_device_info = _nas_device_info(
+            coordinator,
+            entry,
+        )
+
+    def _service(self) -> TerraMasterService | None:
+        """Return the matching service."""
+        return next(
+            (
+                service
+                for service in self.coordinator.data.services
+                if service.name == self._service_name
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return whether service detection was available."""
+        service = self._service()
+
+        return (
+            super().available
+            and service is not None
+            and service.enabled is not None
+        )
+
+    @property
+    def native_value(self) -> str | None:
+        """Return enabled or disabled."""
+        service = self._service()
+
+        if service is None or service.enabled is None:
+            return None
+
+        return (
+            "enabled"
+            if service.enabled
+            else "disabled"
+        )
+
+    @property
+    def extra_state_attributes(
+        self,
+    ) -> dict[str, object] | None:
+        """Return listening port and protocol details."""
+        service = self._service()
+
+        if service is None:
+            return None
+
+        return {
+            "ports": list(service.ports),
+            "protocols": list(service.protocols),
+        }
+
+
+SHARE_SENSOR = SensorEntityDescription(
+    key="shared_folder",
+    translation_key="shared_folder",
+    icon="mdi:folder-network",
+    entity_category=EntityCategory.DIAGNOSTIC,
+)
+
+
+class TerraMasterShareSensor(
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
+):
+    """A TOS shared folder attached to the main NAS device."""
+
+    entity_description = SHARE_SENSOR
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: TerraMasterDataUpdateCoordinator,
+        entry: TerraMasterConfigEntry,
+        share_name: str,
+    ) -> None:
+        super().__init__(coordinator)
+
+        self._share_name = share_name
+        self._home_assistant = coordinator.hass
+        self._host = str(entry.data[CONF_HOST])
+        self._username = str(entry.data[CONF_USERNAME])
+        self._entry_id = entry.entry_id
+        self._share_token = entry.data.get(CONF_SHARE_TOKEN)
+
+        nas_id = entry.unique_id or entry.entry_id
+
+        self._attr_unique_id = f"{nas_id}_share_{share_name}"
+        self._attr_translation_placeholders = {
+            "share": share_name,
+        }
+        self._attr_device_info = _nas_device_info(
+            coordinator,
+            entry,
+        )
+
+    def _share(self) -> TerraMasterShare | None:
+        """Return the matching shared folder."""
+        return next(
+            (
+                share
+                for share in self.coordinator.data.shares
+                if share.name == self._share_name
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return whether the shared folder still exists."""
+        return (
+            super().available
+            and self._share() is not None
+        )
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the shared-folder path."""
+        share = self._share()
+
+        return (
+            share.path
+            if share is not None
+            else None
+        )
+
+    @property
+    def extra_state_attributes(
+        self,
+    ) -> dict[str, object] | None:
+        """Return shared-folder details."""
+        share = self._share()
+
+        if share is None:
+            return None
+
+        attributes: dict[str, object] = {
+            "device": share.device,
+            "type": share.share_type,
+            "hidden": share.hidden,
+            "recycle_bin": share.recycle_bin,
+            "protocols": list(share.protocols),
+        }
+
+        storage = resolve_share_storage(
+            self.coordinator.data,
+            share,
+        )
+
+        if storage.volume is not None:
+            attributes.update(
+                {
+                    "volume": storage.volume.name,
+                    "volume_mountpoint": storage.volume.mountpoint,
+                    "filesystem": storage.volume.filesystem,
+                    "capacity_bytes": storage.volume.size,
+                    "used_bytes": storage.volume.used,
+                    "available_bytes": storage.volume.available,
+                    "usage_percent": storage.volume.usage,
+                }
+            )
+
+        if storage.raid is not None:
+            attributes.update(
+                {
+                    "raid": storage.raid.name,
+                    "raid_level": storage.raid.level,
+                    "raid_state": storage.raid.state,
+                }
+            )
+
+        urls = share_connection_urls(
+            self._host,
+            share,
+            self._username,
+        )
+
+        attributes.update(
+            {
+                f"{protocol}_url": url
+                for protocol, url in urls.items()
+            }
+        )
+
+        if (
+            urls
+            and isinstance(self._share_token, str)
+            and self._share_token
+        ):
+            base_url = _get_home_assistant_url(
+                self._home_assistant,
+            )
+
+            if base_url is not None:
+                attributes["open_share"] = share_page_url(
+                    base_url,
+                    self._entry_id,
+                    self._share_token,
+                    share.name,
+                )
+
+        return attributes
+
+
+@dataclass(frozen=True, kw_only=True)
+class TerraMasterStorageSensorDescription(SensorEntityDescription):
+    """Describe a sensor attached to a storage object."""
+
+    value_fn: Callable[[Any], Any]
+
+
+def _attribute_value(
+    storage_object: Any,
+    *,
+    attribute: str,
+) -> object:
+    """Return a named attribute from a storage data object."""
+    return getattr(
+        storage_object,
+        attribute,
     )
-    return current, usage
 
 
-def _to_text(value: bytes | str | None) -> str:
-    """Normalize optional AsyncSSH process output to text."""
-    if value is None:
-        return ""
-    if isinstance(value, bytes):
-        return value.decode(errors="replace")
-    return value
+DISK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
+    TerraMasterStorageSensorDescription(
+        key="role",
+        translation_key="storage_role",
+        icon="mdi:tag-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda disk: (
+            "system"
+            if disk.is_system
+            else "user"
+        ),
+    ),
+    TerraMasterStorageSensorDescription(
+        key="model",
+        translation_key="disk_model",
+        icon="mdi:harddisk",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda disk: disk.model,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="size",
+        translation_key="capacity",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda disk: disk.size,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="state",
+        translation_key="state",
+        icon="mdi:harddisk",
+        value_fn=lambda disk: disk.state,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="smart_status",
+        translation_key="smart_status",
+        icon="mdi:check-decagram",
+        value_fn=lambda disk: disk.smart_status,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="temperature",
+        translation_key="temperature",
+        device_class=SensorDeviceClass.TEMPERATURE,
+        native_unit_of_measurement=UnitOfTemperature.CELSIUS,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda disk: disk.temperature,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="power_on_hours",
+        translation_key="power_on_time",
+        device_class=SensorDeviceClass.DURATION,
+        native_unit_of_measurement=UnitOfTime.DAYS,
+        suggested_unit_of_measurement=UnitOfTime.DAYS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        suggested_display_precision=1,
+        value_fn=lambda disk: (
+            round(disk.power_on_hours / 24, 2)
+            if disk.power_on_hours is not None
+            else None
+        ),
+    ),
+    *tuple(
+        TerraMasterStorageSensorDescription(
+            key=key,
+            translation_key=translation_key,
+            icon=icon,
+            state_class=SensorStateClass.TOTAL,
+            entity_category=EntityCategory.DIAGNOSTIC,
+            value_fn=partial(
+                _attribute_value,
+                attribute=key,
+            ),
+        )
+        for key, translation_key, icon in (
+            (
+                "power_cycle_count",
+                "power_cycles",
+                "mdi:power-cycle",
+            ),
+            (
+                "start_stop_count",
+                "start_stop_cycles",
+                "mdi:restart",
+            ),
+            (
+                "load_cycle_count",
+                "load_cycles",
+                "mdi:harddisk-plus",
+            ),
+            (
+                "spin_retry_count",
+                "spin_retries",
+                "mdi:rotate-3d-variant",
+            ),
+            (
+                "reallocated_events",
+                "reallocated_events",
+                "mdi:swap-horizontal",
+            ),
+            (
+                "udma_crc_errors",
+                "udma_crc_errors",
+                "mdi:connection",
+            ),
+        )
+    ),
+    TerraMasterStorageSensorDescription(
+        key="reallocated_sectors",
+        translation_key="reallocated_sectors",
+        icon="mdi:alert-circle-outline",
+        state_class=SensorStateClass.TOTAL,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda disk: disk.reallocated_sectors,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="pending_sectors",
+        translation_key="pending_sectors",
+        icon="mdi:alert-circle-outline",
+        state_class=SensorStateClass.TOTAL,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda disk: disk.pending_sectors,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="offline_uncorrectable",
+        translation_key="offline_uncorrectable",
+        icon="mdi:alert-octagon-outline",
+        state_class=SensorStateClass.TOTAL,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda disk: disk.offline_uncorrectable,
+    ),
+)
+
+
+RAID_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
+    TerraMasterStorageSensorDescription(
+        key="role",
+        translation_key="storage_role",
+        icon="mdi:tag-outline",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda raid: (
+            "system"
+            if raid.is_system
+            else "user"
+        ),
+    ),
+    TerraMasterStorageSensorDescription(
+        key="level",
+        translation_key="raid_level",
+        value_fn=lambda raid: raid.level,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="state",
+        translation_key="state",
+        value_fn=lambda raid: raid.state,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="size",
+        translation_key="capacity",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        value_fn=lambda raid: raid.size,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="degraded_devices",
+        translation_key="degraded_devices",
+        icon="mdi:harddisk-remove",
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda raid: raid.degraded_devices,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="sync_action",
+        translation_key="sync_action",
+        icon="mdi:sync",
+        value_fn=lambda raid: raid.sync_action,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="sync_progress",
+        translation_key="sync_progress",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda raid: raid.sync_progress,
+    ),
+)
+
+
+VOLUME_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
+    TerraMasterStorageSensorDescription(
+        key="filesystem",
+        translation_key="filesystem",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda volume: volume.filesystem,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="mountpoint",
+        translation_key="mountpoint",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda volume: volume.mountpoint,
+    ),
+    *tuple(
+        TerraMasterStorageSensorDescription(
+            key=key,
+            translation_key=translation_key,
+            device_class=SensorDeviceClass.DATA_SIZE,
+            native_unit_of_measurement=UnitOfInformation.BYTES,
+            suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+            state_class=SensorStateClass.MEASUREMENT,
+            value_fn=partial(
+                _attribute_value,
+                attribute=key,
+            ),
+        )
+        for key, translation_key in (
+            ("size", "capacity"),
+            ("used", "used_space"),
+            ("available", "available_space"),
+        )
+    ),
+    TerraMasterStorageSensorDescription(
+        key="usage",
+        translation_key="disk_usage",
+        native_unit_of_measurement=PERCENTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        value_fn=lambda volume: volume.usage,
+    ),
+)
+
+
+NETWORK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
+    TerraMasterStorageSensorDescription(
+        key="state",
+        translation_key="link_state",
+        icon="mdi:lan-connect",
+        value_fn=lambda network: network.state,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="speed",
+        translation_key="link_speed",
+        icon="mdi:speedometer",
+        native_unit_of_measurement="Mbit/s",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda network: network.speed,
+    ),
+    *tuple(
+        TerraMasterStorageSensorDescription(
+            key=key,
+            translation_key=translation_key,
+            device_class=SensorDeviceClass.DATA_SIZE,
+            native_unit_of_measurement=UnitOfInformation.BYTES,
+            suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+            state_class=SensorStateClass.TOTAL_INCREASING,
+            value_fn=partial(
+                _attribute_value,
+                attribute=key,
+            ),
+        )
+        for key, translation_key in (
+            ("received_bytes", "received_data"),
+            ("sent_bytes", "sent_data"),
+        )
+    ),
+    *tuple(
+        TerraMasterStorageSensorDescription(
+            key=key,
+            translation_key=translation_key,
+            device_class=SensorDeviceClass.DATA_RATE,
+            native_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
+            state_class=SensorStateClass.MEASUREMENT,
+            suggested_display_precision=3,
+            value_fn=partial(
+                _attribute_value,
+                attribute=key,
+            ),
+        )
+        for key, translation_key in (
+            ("receive_rate", "receive_rate"),
+            ("transmit_rate", "transmit_rate"),
+        )
+    ),
+)
+
+
+class TerraMasterStorageSensor(
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
+):
+    """Sensor attached to a dynamically discovered storage device."""
+
+    entity_description: TerraMasterStorageSensorDescription
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: TerraMasterDataUpdateCoordinator,
+        entry: TerraMasterConfigEntry,
+        kind: str,
+        object_name: str,
+        description: TerraMasterStorageSensorDescription,
+    ) -> None:
+        super().__init__(coordinator)
+
+        self.entity_description = description
+        self._kind = kind
+        self._object_name = object_name
+
+        nas_id = entry.unique_id or entry.entry_id
+        object_id = f"{nas_id}_{kind}_{object_name}"
+
+        storage_object = self._object()
+
+        is_system = bool(
+            storage_object is not None
+            and getattr(
+                storage_object,
+                "is_system",
+                False,
+            )
+        )
+
+        device_name = (
+            f"System {kind} {object_name}"
+            if is_system
+            else f"{kind.upper()} {object_name}"
+        )
+
+        self._attr_unique_id = (
+            f"{object_id}_{description.key}"
+        )
+
+        self._attr_device_info = {
+            "identifiers": {
+                (DOMAIN, object_id),
+            },
+            "name": device_name,
+            "manufacturer": "TerraMaster",
+            "model": (
+                f"{'System ' if is_system else ''}"
+                f"{kind.capitalize()}"
+            ),
+            "via_device": (
+                DOMAIN,
+                nas_id,
+            ),
+        }
+
+    def _object(
+        self,
+    ) -> (
+        TerraMasterDisk
+        | TerraMasterRaid
+        | TerraMasterVolume
+        | TerraMasterNetwork
+        | None
+    ):
+        """Return the matching dynamic storage object."""
+        objects = getattr(
+            self.coordinator.data,
+            f"{self._kind}s",
+        )
+
+        return next(
+            (
+                item
+                for item in objects
+                if item.name == self._object_name
+            ),
+            None,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return whether the object and metric are available."""
+        return (
+            super().available
+            and self.native_value is not None
+        )
+
+    @property
+    def native_value(self) -> Any:
+        """Return the current storage metric."""
+        storage_object = self._object()
+
+        if storage_object is None:
+            return None
+
+        return self.entity_description.value_fn(
+            storage_object,
+        )
