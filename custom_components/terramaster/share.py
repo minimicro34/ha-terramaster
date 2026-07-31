@@ -13,7 +13,7 @@ from homeassistant.components.http import HomeAssistantView
 from homeassistant.const import CONF_HOST, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
-from .const import DOMAIN
+from .const import CONF_SHARE_TOKEN, DOMAIN
 from .models import (
     TerraMasterData,
     TerraMasterRaid,
@@ -23,12 +23,6 @@ from .models import (
 
 SHARE_VIEW_PATH = "/api/terramaster/share"
 
-# These values are registered before the sensor platform is loaded.
-# This allows the existing calls in sensor.py to keep using the same
-# share_page_url() and share_connection_urls() signatures.
-_SHARE_TOKENS: dict[str, str] = {}
-_SHARE_USERNAMES: dict[str, str] = {}
-
 
 @dataclass(frozen=True, slots=True)
 class TerraMasterShareStorage:
@@ -36,23 +30,6 @@ class TerraMasterShareStorage:
 
     volume: TerraMasterVolume | None
     raid: TerraMasterRaid | None
-
-
-def register_share_access(
-    *,
-    entry_id: str,
-    host: str,
-    username: str,
-    token: str,
-) -> None:
-    """Register access information for a TerraMaster config entry."""
-    _SHARE_TOKENS[entry_id] = token
-    _SHARE_USERNAMES[host] = username
-
-
-def unregister_share_access(entry_id: str) -> None:
-    """Remove access information for an unloaded config entry."""
-    _SHARE_TOKENS.pop(entry_id, None)
 
 
 def resolve_share_storage(
@@ -64,7 +41,9 @@ def resolve_share_storage(
         volume
         for volume in data.volumes
         if share.path == volume.mountpoint.rstrip("/")
-        or share.path.startswith(f"{volume.mountpoint.rstrip('/')}/")
+        or share.path.startswith(
+            f"{volume.mountpoint.rstrip('/')}/"
+        )
     )
 
     volume = (
@@ -122,6 +101,7 @@ def _format_bytes(value: int) -> str:
 def share_connection_urls(
     host: str,
     share: TerraMasterShare,
+    username: str | None = None,
 ) -> dict[str, str]:
     """Return connection URLs for the protocols available on a share."""
     url_host = (
@@ -129,8 +109,6 @@ def share_connection_urls(
         if ":" in host and not host.startswith("[")
         else host
     )
-
-    username = _SHARE_USERNAMES.get(host)
 
     encoded_name = quote(
         share.name,
@@ -173,17 +151,14 @@ def share_connection_urls(
 def share_page_url(
     base_url: str,
     entry_id: str,
+    token: str,
     share_name: str | None = None,
 ) -> str:
     """Build an absolute URL for the shared-folder connection page."""
     parameters = {
         "entry_id": entry_id,
+        "token": token,
     }
-
-    token = _SHARE_TOKENS.get(entry_id)
-
-    if token:
-        parameters["token"] = token
 
     if share_name is not None:
         parameters["share"] = share_name
@@ -197,16 +172,20 @@ def share_page_url(
 
 
 class TerraMasterShareView(HomeAssistantView):
-    """Show safe links for the protocols available on shared folders."""
+    """Show safe links for TerraMaster shared folders."""
 
     url = SHARE_VIEW_PATH
     name = "api:terramaster:share"
 
-    # Direct browser navigation does not send the Home Assistant bearer token.
-    # Access is instead protected by the random per-entry token in the URL.
+    # Direct navigation from an entity does not include a Home Assistant
+    # bearer token. Access is protected by a random per-entry URL token.
     requires_auth = False
 
-    def __init__(self, hass: HomeAssistant) -> None:
+    def __init__(
+        self,
+        hass: HomeAssistant,
+    ) -> None:
+        """Initialize the shared-folder view."""
         self._hass = hass
 
     async def get(
@@ -227,7 +206,7 @@ class TerraMasterShareView(HomeAssistantView):
         if entry is None or entry.domain != DOMAIN:
             raise web.HTTPNotFound
 
-        expected_token = _SHARE_TOKENS.get(entry.entry_id)
+        expected_token = entry.data.get(CONF_SHARE_TOKEN)
 
         if (
             not isinstance(expected_token, str)
@@ -270,7 +249,7 @@ class TerraMasterShareView(HomeAssistantView):
 
         language = "fr" if is_french else "en"
 
-        title_all = (
+        all_shares_title = (
             "Partages TerraMaster"
             if is_french
             else "TerraMaster shares"
@@ -292,6 +271,12 @@ class TerraMasterShareView(HomeAssistantView):
             "Ouvrir avec"
             if is_french
             else "Open with"
+        )
+
+        user_label = (
+            "Utilisateur proposé"
+            if is_french
+            else "Suggested username"
         )
 
         hidden_label = (
@@ -349,6 +334,7 @@ class TerraMasterShareView(HomeAssistantView):
             urls = share_connection_urls(
                 host,
                 share,
+                username,
             )
 
             protocol_badges = "".join(
@@ -357,7 +343,7 @@ class TerraMasterShareView(HomeAssistantView):
                     f'<span aria-hidden="true">'
                     f"{protocol_icons[protocol]}"
                     f"</span> "
-                    f"{labels[protocol]}"
+                    f"{escape(labels[protocol])}"
                     f"</span>"
                 )
                 for protocol in share.protocols
@@ -374,14 +360,14 @@ class TerraMasterShareView(HomeAssistantView):
 
             if share.hidden:
                 property_badges.append(
-                    f'<span class="badge secondary">'
+                    '<span class="badge secondary">'
                     f"{escape(hidden_label)}"
                     "</span>"
                 )
 
             if share.recycle_bin:
                 property_badges.append(
-                    f'<span class="badge secondary">'
+                    '<span class="badge secondary">'
                     f"{escape(recycle_label)}"
                     "</span>"
                 )
@@ -395,15 +381,15 @@ class TerraMasterShareView(HomeAssistantView):
                 (
                     f'<a class="button protocol-{protocol}" '
                     f'href="{escape(url, quote=True)}">'
-                    f'<span class="protocol-icon" '
-                    f'aria-hidden="true">'
+                    '<span class="protocol-icon" '
+                    'aria-hidden="true">'
                     f"{protocol_icons[protocol]}"
-                    f"</span>"
-                    f"<span>"
+                    "</span>"
+                    "<span>"
                     f"{escape(open_label)} "
                     f"{escape(labels[protocol])}"
-                    f"</span>"
-                    f"</a>"
+                    "</span>"
+                    "</a>"
                 )
                 for protocol, url in urls.items()
             )
@@ -492,14 +478,10 @@ class TerraMasterShareView(HomeAssistantView):
             )
 
             username_note = (
-                (
-                    f'<p class="username">'
-                    f"{'Utilisateur' if is_french else 'Username'} : "
-                    f"<strong>{escape(username)}</strong>"
-                    f"</p>"
-                )
-                if username
-                else ""
+                '<p class="username">'
+                f"{escape(user_label)} : "
+                f"<strong>{escape(username)}</strong>"
+                "</p>"
             )
 
             sections.append(
@@ -507,9 +489,9 @@ class TerraMasterShareView(HomeAssistantView):
                 '<div class="share-heading">'
                 f"<h2>{escape(share.name)}</h2>"
                 "</div>"
-                f'<p class="path">'
+                '<p class="path">'
                 f"<code>{escape(share.path)}</code>"
-                f"</p>"
+                "</p>"
                 f'<div class="badges">{badges}</div>'
                 f"{detail_list}"
                 f"{username_note}"
@@ -520,12 +502,10 @@ class TerraMasterShareView(HomeAssistantView):
         safe_title = (
             escape(shares[0].name)
             if share_name is not None
-            else title_all
+            else all_shares_title
         )
 
-        page_sections = "\n".join(
-            sections,
-        )
+        page_sections = "\n".join(sections)
 
         body = f"""<!doctype html>
 <html lang="{language}">
