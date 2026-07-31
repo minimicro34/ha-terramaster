@@ -20,7 +20,7 @@ TOS 4. It connects over SSH with `asyncssh`; the default TerraMaster SSH port is
 
 ## Sensors
 
-- Commercial NAS model, hardware platform, TOS version, Linux distribution and
+- Commercial NAS model, SoC/hardware platform, TOS version, Linux distribution and
   kernel version
 - Uptime in days and last TOS restart timestamp
 - Processor model, aggregate CPU usage and dynamic per-core usage
@@ -36,14 +36,15 @@ TOS 4. It connects over SSH with `asyncssh`; the default TerraMaster SSH port is
 - Per-interface link state, negotiated speed, transferred data in GB and live traffic
   rates in Mbit/s
 - TOS shared folders as entities on the main NAS device, with path, backing device,
-  type, visibility and recycle-bin details
+  type, visibility and recycle-bin details; connection URLs are exposed only for the
+  SMB/CIFS, NFS and AFP protocols currently available on each folder
 - SSH, Telnet and SNMP runtime status with listening protocol and port attributes
 
-The commercial model is read with TOS's `getmodel` utility; the hardware platform is
-reported separately. TOS 4 version detection includes `/usr/www/version`; the Linux
-distribution comes from `os-release` or `openwrt_release`, and the kernel version from
-`uname -r`. Temperature still depends on the sensors exposed by a particular TOS
-build.
+The commercial model is read with TOS's privileged `getmodel` utility. The
+SoC/hardware platform and processor model are reported separately. TOS 4 version
+detection includes `/usr/www/version`; the Linux distribution comes from `os-release`
+or `openwrt_release`, and the kernel version from `uname -r`. Temperature still
+depends on the sensors exposed by a particular TOS build.
 When TOS does not expose a metric, its entity remains unavailable without preventing
 other sensors from updating. CPU usage becomes available after the second refresh,
 because aggregate and per-core usage are calculated from two `/proc/stat` samples.
@@ -64,16 +65,16 @@ For a manual installation, copy `custom_components/terramaster` into Home Assist
 
 Enable SSH in the TOS control panel and use the primary TOS administrator account. On
 TOS 4.2.12 and newer, TerraMaster uses the same password for SSH and `sudo`. The
-integration runs one privileged, read-only collection block for the TOS version and
-`smartctl -H -A -d sat`, the shared-folder database and listening service ports; it
-does not execute write operations. The password is sent to `sudo -S` through standard
-input and is never embedded in the remote command or written to logs. A failed sudo
-authentication is not retried until the integration is reloaded, avoiding TOS's
-temporary lockout after repeated failures.
+integration runs one privileged, read-only collection block for the commercial model,
+TOS version, `smartctl -H -A -d sat`, shared-folder database and active sharing
+configuration, and listening service ports; it does not execute write operations. The
+password is sent to `sudo -S` through standard input and is never embedded in the
+remote command or written to logs. A failed sudo authentication is not retried until
+the integration is reloaded, avoiding TOS's temporary lockout after repeated failures.
 
 If the account cannot use `sudo`, the NAS, RAID, volume and unprivileged system
-sensors continue to work; the TOS-version, SMART, shared-folder and listening-service
-details remain unavailable.
+sensors continue to work; the commercial-model, TOS-version, SMART, shared-folder and
+listening-service details remain unavailable.
 
 The first successful setup stores the NAS public SSH host key. All later connections
 verify that key. If TOS is reinstalled or the key legitimately changes, start the

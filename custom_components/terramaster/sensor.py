@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from functools import partial
 from typing import Any
+from urllib.parse import quote
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -15,6 +16,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.const import (
+    CONF_HOST,
     PERCENTAGE,
     UnitOfDataRate,
     UnitOfInformation,
@@ -22,6 +24,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
@@ -89,6 +92,7 @@ SENSORS: tuple[TerraMasterSensorEntityDescription, ...] = (
         translation_key="uptime",
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.DAYS,
+        suggested_unit_of_measurement=UnitOfTime.DAYS,
         entity_category=EntityCategory.DIAGNOSTIC,
         suggested_display_precision=1,
         value_fn=lambda data: (
@@ -128,7 +132,6 @@ SENSORS: tuple[TerraMasterSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.DATA_SIZE,
         native_unit_of_measurement=UnitOfInformation.BYTES,
         suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
-        entity_category=EntityCategory.DIAGNOSTIC,
         value_fn=lambda data: data.memory_total,
     ),
     TerraMasterSensorEntityDescription(
@@ -170,12 +173,56 @@ SENSORS: tuple[TerraMasterSensorEntityDescription, ...] = (
 )
 
 
+_SUGGESTED_UNIT_MIGRATIONS = {
+    "_uptime": (UnitOfTime.SECONDS, UnitOfTime.DAYS),
+    "_power_on_hours": (UnitOfTime.HOURS, UnitOfTime.DAYS),
+    "_receive_rate": (
+        UnitOfDataRate.BYTES_PER_SECOND,
+        UnitOfDataRate.MEGABITS_PER_SECOND,
+    ),
+    "_transmit_rate": (
+        UnitOfDataRate.BYTES_PER_SECOND,
+        UnitOfDataRate.MEGABITS_PER_SECOND,
+    ),
+    "_received_bytes": (UnitOfInformation.BYTES, UnitOfInformation.GIGABYTES),
+    "_sent_bytes": (UnitOfInformation.BYTES, UnitOfInformation.GIGABYTES),
+}
+
+
+def _migrate_registry_defaults(hass: HomeAssistant) -> None:
+    """Migrate integration defaults without overriding user-selected units."""
+    registry = er.async_get(hass)
+    for registry_entry in list(registry.entities.values()):
+        if registry_entry.platform != DOMAIN:
+            continue
+        if (
+            registry_entry.unique_id.endswith("_memory_total")
+            and registry_entry.entity_category == EntityCategory.DIAGNOSTIC
+        ):
+            registry.async_update_entity(registry_entry.entity_id, entity_category=None)
+        if "unit_of_measurement" in registry_entry.options.get("sensor", {}):
+            continue
+        private_options: Mapping[str, Any] = registry_entry.options.get(
+            "sensor.private", {}
+        )
+        current_unit = private_options.get("suggested_unit_of_measurement")
+        for suffix, (old_unit, new_unit) in _SUGGESTED_UNIT_MIGRATIONS.items():
+            if registry_entry.unique_id.endswith(suffix) and current_unit == old_unit:
+                registry.async_update_entity_options(
+                    registry_entry.entity_id,
+                    "sensor.private",
+                    {"suggested_unit_of_measurement": new_unit},
+                )
+                break
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: TerraMasterConfigEntry,
     async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
     """Set up TerraMaster sensors."""
+    _migrate_registry_defaults(hass)
     async_add_entities(
         TerraMasterSensor(entry.runtime_data, entry, description)
         for description in SENSORS
@@ -426,6 +473,8 @@ class TerraMasterShareSensor(
     ) -> None:
         super().__init__(coordinator)
         self._share_name = share_name
+        host = str(entry.data[CONF_HOST])
+        self._host = f"[{host}]" if ":" in host and not host.startswith("[") else host
         nas_id = entry.unique_id or entry.entry_id
         self._attr_unique_id = f"{nas_id}_share_{share_name}"
         self._attr_translation_placeholders = {"share": share_name}
@@ -464,12 +513,21 @@ class TerraMasterShareSensor(
         share = self._share()
         if share is None:
             return None
-        return {
+        attributes: dict[str, object] = {
             "device": share.device,
             "type": share.share_type,
             "hidden": share.hidden,
             "recycle_bin": share.recycle_bin,
+            "protocols": list(share.protocols),
         }
+        encoded_name = quote(share.name, safe="")
+        if "smb" in share.protocols:
+            attributes["smb_url"] = f"smb://{self._host}/{encoded_name}"
+        if "nfs" in share.protocols:
+            attributes["nfs_url"] = f"nfs://{self._host}{quote(share.path, safe='/')}"
+        if "afp" in share.protocols:
+            attributes["afp_url"] = f"afp://{self._host}/{encoded_name}"
+        return attributes
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -533,6 +591,7 @@ DISK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
         translation_key="power_on_time",
         device_class=SensorDeviceClass.DURATION,
         native_unit_of_measurement=UnitOfTime.DAYS,
+        suggested_unit_of_measurement=UnitOfTime.DAYS,
         entity_category=EntityCategory.DIAGNOSTIC,
         suggested_display_precision=1,
         value_fn=lambda disk: (

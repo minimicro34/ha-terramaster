@@ -2,8 +2,16 @@
 
 from unittest.mock import Mock
 
-from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_PASSWORD,
+    CONF_PORT,
+    CONF_USERNAME,
+    UnitOfTime,
+)
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.entity import EntityCategory
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.terramaster.const import DOMAIN
@@ -95,6 +103,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
                 share_type="public",
                 hidden=False,
                 recycle_bin=True,
+                protocols=("smb", "nfs"),
             ),
         ),
         services=(
@@ -122,9 +131,35 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
     )
     entry.runtime_data = coordinator
     entities = []
+    registry = er.async_get(hass)
+    uptime_registry_entry = registry.async_get_or_create(
+        "sensor", DOMAIN, "nas.local:9222_uptime"
+    )
+    memory_total_registry_entry = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        "nas.local:9222_memory_total",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    )
+    registry.async_update_entity_options(
+        uptime_registry_entry.entity_id,
+        "sensor.private",
+        {"suggested_unit_of_measurement": UnitOfTime.SECONDS},
+    )
 
     try:
         await async_setup_entry(hass, entry, entities.extend)
+
+        migrated_uptime = registry.async_get(uptime_registry_entry.entity_id)
+        assert migrated_uptime is not None
+        assert migrated_uptime.options["sensor.private"] == {
+            "suggested_unit_of_measurement": UnitOfTime.DAYS
+        }
+        migrated_memory_total = registry.async_get(
+            memory_total_registry_entry.entity_id
+        )
+        assert migrated_memory_total is not None
+        assert migrated_memory_total.entity_category is None
 
         device_names = {
             entity.device_info["name"]
@@ -152,5 +187,12 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         )
         assert share_entity.device_info["name"] == "NAS-NICO"
         assert share_entity.native_value == "/mnt/md0/public"
+        assert share_entity.extra_state_attributes["smb_url"] == (
+            "smb://nas.local/public"
+        )
+        assert share_entity.extra_state_attributes["nfs_url"] == (
+            "nfs://nas.local/mnt/md0/public"
+        )
+        assert "afp_url" not in share_entity.extra_state_attributes
     finally:
         await coordinator.async_shutdown()

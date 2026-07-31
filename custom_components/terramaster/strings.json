@@ -35,13 +35,13 @@
   "entity": {
     "sensor": {
       "model": {"name": "Model"},
-      "platform": {"name": "Hardware platform"},
+      "platform": {"name": "SoC / hardware platform"},
       "tos_version": {"name": "TOS version"},
       "linux_distribution": {"name": "Linux distribution"},
       "kernel_version": {"name": "Linux kernel version"},
       "uptime": {"name": "Uptime"},
       "last_restart": {"name": "Last restart"},
-      "cpu_model": {"name": "Processor"},
+      "cpu_model": {"name": "Processor model"},
       "cpu_usage": {"name": "CPU usage"},
       "cpu_core_usage": {"name": "CPU core {core}"},
       "memory_total": {"name": "Total memory"},

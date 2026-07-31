@@ -106,7 +106,25 @@ cpu_model=$(awk -F: \
     '/^(model name|Processor|Hardware)[[:space:]]*:/ {
         sub(/^[[:space:]]+/, "", $2); print $2; exit
     }' /proc/cpuinfo 2>/dev/null)
-[ -z "$cpu_model" ] && cpu_model=$platform
+if [ -z "$cpu_model" ]; then
+    cpu_implementer=$(awk -F: '/^CPU implementer/ {
+        gsub(/[[:space:]]/, "", $2); print tolower($2); exit
+    }' /proc/cpuinfo 2>/dev/null)
+    cpu_part=$(awk -F: '/^CPU part/ {
+        gsub(/[[:space:]]/, "", $2); print tolower($2); exit
+    }' /proc/cpuinfo 2>/dev/null)
+    case "$cpu_implementer:$cpu_part" in
+        0x41:0xd03) cpu_model='ARM Cortex-A53' ;;
+        0x41:0xd04) cpu_model='ARM Cortex-A35' ;;
+        0x41:0xd05) cpu_model='ARM Cortex-A55' ;;
+        0x41:0xd07) cpu_model='ARM Cortex-A57' ;;
+        0x41:0xd08) cpu_model='ARM Cortex-A72' ;;
+        0x41:0xd09) cpu_model='ARM Cortex-A73' ;;
+        0x41:0xd0a) cpu_model='ARM Cortex-A75' ;;
+        0x41:0xd0b) cpu_model='ARM Cortex-A76' ;;
+        0x41:0xd41) cpu_model='ARM Cortex-A78' ;;
+    esac
+fi
 [ -z "$cpu_model" ] && cpu_model=$(uname -m 2>/dev/null)
 printf 'cpu_model=%s\n' "$cpu_model"
 printf 'cpu='; awk '/^cpu / {print $2,$3,$4,$5,$6,$7,$8,$9}' /proc/stat
@@ -165,6 +183,15 @@ done
 
 
 _OPTIONAL_COMMAND = r"""
+model=''
+if command -v getmodel >/dev/null 2>&1; then
+    model=$(getmodel 2>/dev/null)
+elif [ -x /sbin/getmodel ]; then
+    model=$(/sbin/getmodel 2>/dev/null)
+fi
+[ "$model" = "---" ] && model=''
+[ -n "$model" ] && printf 'model=%s\n' "$model"
+
 tos_version=''
 for file in /usr/www/version /etc/version /etc/TOS_VERSION /etc/tos_version \
     /etc/tos-version /etc/tos-release /etc/TOS_RELEASE \
@@ -194,13 +221,53 @@ if command -v smartctl >/dev/null 2>&1; then
     done
 fi
 
+ini_has_section() {
+    awk -v target="$2" '
+        /^[[:space:]]*\[/ {
+            section=$0
+            sub(/^[[:space:]]*\[/, "", section)
+            sub(/\][[:space:]]*.*$/, "", section)
+            if (tolower(section) == tolower(target)) found=1
+        }
+        END {exit found ? 0 : 1}
+    ' "$1" 2>/dev/null
+}
+
+nfs_exports_path() {
+    awk -v target="$2" '
+        /^[[:space:]]*#/ || NF == 0 {next}
+        {
+            path=$1
+            gsub(/\\040/, " ", path)
+            if (path == target) found=1
+        }
+        END {exit found ? 0 : 1}
+    ' "$1" 2>/dev/null
+}
+
 if command -v sqlite3 >/dev/null 2>&1 && [ -r /etc/base/nasdb ]; then
     sqlite3 -separator '|' /etc/base/nasdb \
         'SELECT foldername,mntpath,device,type,hidden,recycle FROM share;' \
         2>/dev/null | while IFS='|' read -r share_name share_path \
             share_device share_type share_hidden share_recycle; do
-        printf 'share=%s|%s|%s|%s|%s|%s\n' "$share_name" "$share_path" \
-            "$share_device" "$share_type" "$share_hidden" "$share_recycle"
+        share_protocols=''
+        if pidof smbd >/dev/null 2>&1 && [ -r /etc/samba/smb.conf ] && \
+            ini_has_section /etc/samba/smb.conf "$share_name"; then
+            share_protocols='smb'
+        fi
+        if pidof rpc.mountd >/dev/null 2>&1 && [ -r /etc/exports ] && \
+            nfs_exports_path /etc/exports "$share_path"; then
+            [ -n "$share_protocols" ] && share_protocols="$share_protocols,nfs" || \
+                share_protocols='nfs'
+        fi
+        if pidof netatalk >/dev/null 2>&1 && [ -r /etc/afp.conf ] && \
+            ini_has_section /etc/afp.conf "$share_name"; then
+            [ -n "$share_protocols" ] && share_protocols="$share_protocols,afp" || \
+                share_protocols='afp'
+        fi
+        printf 'share=%s|%s|%s|%s|%s|%s|%s\n' "$share_name" "$share_path" \
+            "$share_device" "$share_type" "$share_hidden" "$share_recycle" \
+            "$share_protocols"
     done
 fi
 
@@ -494,10 +561,11 @@ class TerraMasterApiClient:
     def _parse_shares(rows: list[str]) -> tuple[TerraMasterShare, ...]:
         shares: list[TerraMasterShare] = []
         for row in rows:
-            parts = row.split("|", 5)
-            if len(parts) != 6 or not parts[0]:
+            parts = row.split("|", 6)
+            if len(parts) not in (6, 7) or not parts[0]:
                 continue
-            name, path, device, share_type, hidden, recycle_bin = parts
+            name, path, device, share_type, hidden, recycle_bin = parts[:6]
+            protocols = parts[6].split(",") if len(parts) == 7 else []
             shares.append(
                 TerraMasterShare(
                     name=name,
@@ -506,6 +574,11 @@ class TerraMasterApiClient:
                     share_type=share_type,
                     hidden=hidden == "1",
                     recycle_bin=recycle_bin == "1",
+                    protocols=tuple(
+                        protocol
+                        for protocol in ("smb", "nfs", "afp")
+                        if protocol in protocols
+                    ),
                 )
             )
         return tuple(sorted(shares, key=lambda share: share.name.casefold()))

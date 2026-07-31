@@ -38,7 +38,7 @@ lsblk=NAME="md0" SIZE="994648784896"
 filesystem=/dev/mapper/vg0-lv0|btrfs|971333632|444025736|524035576|/mnt/md0
 filesystem=/dev/mapper/vg0-lv0|btrfs|971333632|444025736|524035576|/home
 network=eth0|up|1000|1000000|500000
-share=public|/mnt/md0/public|/dev/mapper/vg0-lv0|public|0|1
+share=public|/mnt/md0/public|/dev/mapper/vg0-lv0|public|0|1|smb,nfs
 listeners_available=1
 listener=tcp|0.0.0.0:9222|123/sshd
 listener=tcp|0.0.0.0:23|456/telnetd
@@ -102,6 +102,7 @@ def test_parse_output() -> None:
     assert second.cpu_cores[0].usage == 50.0
     assert first.shares[0].name == "public"
     assert first.shares[0].recycle_bin is True
+    assert first.shares[0].protocols == ("smb", "nfs")
     assert first.services[0].name == "ssh"
     assert first.services[0].ports == (9222,)
     assert first.services[1].enabled is True
@@ -127,6 +128,7 @@ async def test_privileged_metrics_use_password_on_stdin() -> None:
         return_value=SimpleNamespace(
             exit_status=0,
             stdout=(
+                "model=F2-210\n"
                 "tos_version=4.2.44-294\n"
                 "smart=sdb|SMART overall-health self-assessment test result: PASSED\n"
             ),
@@ -137,6 +139,7 @@ async def test_privileged_metrics_use_password_on_stdin() -> None:
     output = await client._async_collect_optional_data(connection)  # noqa: SLF001
 
     assert "tos_version=4.2.44-294" in output
+    assert "model=F2-210" in output
     assert "smart=sdb" in output
     command = connection.run.await_args.args[0]
     assert command.startswith("sudo -S")
