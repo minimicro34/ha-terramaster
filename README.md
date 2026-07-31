@@ -82,7 +82,7 @@ host address and the SSH host key are redacted.
 
 ## Development
 
-The integration targets modern Home Assistant releases and Python 3.13. Run the
+The integration targets Home Assistant 2026.7 or newer and Python 3.14. Run the
 repository through `ruff`, `pytest`, `hassfest`, and HACS validation before publishing
 a release.
 
