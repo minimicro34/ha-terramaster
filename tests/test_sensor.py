@@ -91,14 +91,17 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
     entry.runtime_data = coordinator
     entities = []
 
-    await async_setup_entry(hass, entry, entities.extend)
+    try:
+        await async_setup_entry(hass, entry, entities.extend)
 
-    device_names = {
-        entity.device_info["name"]
-        for entity in entities
-        if entity.device_info is not None
-    }
-    assert "System disk sda" in device_names
-    assert "DISK sdb" in device_names
-    assert "RAID md0" in device_names
-    assert "VOLUME vg0-lv0" in device_names
+        device_names = {
+            entity.device_info["name"]
+            for entity in entities
+            if entity.device_info is not None
+        }
+        assert "System disk sda" in device_names
+        assert "DISK sdb" in device_names
+        assert "RAID md0" in device_names
+        assert "VOLUME vg0-lv0" in device_names
+    finally:
+        await coordinator.async_shutdown()
