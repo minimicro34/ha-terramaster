@@ -3,6 +3,7 @@
   "name": "TerraMaster TOS",
   "codeowners": ["@minimicro34"],
   "config_flow": true,
+  "dependencies": ["http"],
   "documentation": "https://github.com/minimicro34/ha-terramaster",
   "integration_type": "device",
   "iot_class": "local_polling",

@@ -5,12 +5,20 @@ from __future__ import annotations
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers.typing import ConfigType
 
 from .api import TerraMasterApiClient
 from .const import CONF_HOST_KEY, PLATFORMS
 from .coordinator import TerraMasterDataUpdateCoordinator
+from .share import TerraMasterShareView
 
 type TerraMasterConfigEntry = ConfigEntry[TerraMasterDataUpdateCoordinator]
+
+
+async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
+    """Set up the TerraMaster integration."""
+    hass.http.register_view(TerraMasterShareView(hass))
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: TerraMasterConfigEntry) -> bool:
