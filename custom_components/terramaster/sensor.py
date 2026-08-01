@@ -419,6 +419,7 @@ class TerraMasterSharesPageSensor(
         self._home_assistant = coordinator.hass
         self._entry_id = entry.entry_id
         self._share_token = entry.data.get(CONF_SHARE_TOKEN)
+        self._base_url = _get_home_assistant_url(coordinator.hass)
 
         nas_id = entry.unique_id or entry.entry_id
 
@@ -437,13 +438,11 @@ class TerraMasterSharesPageSensor(
         ):
             return None
 
-        base_url = _get_home_assistant_url(self._home_assistant)
-
-        if base_url is None:
+        if self._base_url is None:
             return None
 
         return share_page_url(
-            base_url,
+            self._base_url,
             self._entry_id,
             self._share_token,
         )
