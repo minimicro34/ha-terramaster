@@ -63,7 +63,10 @@
       "receive_rate": {"name": "Débit entrant"},
       "transmit_rate": {"name": "Débit sortant"},
       "service_status": {"name": "Service {service}", "state": {"enabled": "Activé", "disabled": "Désactivé"}},
-      "shared_folder": {"name": "Dossier partagé {share}"}
+      "shared_folder": {"name": "Dossier partagé {share}"},
+      "shared_folders_page": {
+          "name": "Page des dossiers partagés"
+      }
     }
   }
 }
