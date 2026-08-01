@@ -453,17 +453,27 @@ class TerraMasterSharesPageSensor(
         return super().available and self._page_url() is not None
 
     @property
-    def native_value(self) -> str | None:
-        """Return the shared-folders page URL."""
-        return self._page_url()
+    def native_value(self) -> int:
+        """Return the number of detected shared folders."""
+        return len(self.coordinator.data.shares)
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
-        """Return detected shared-folder information."""
-        return {
-            "share_count": len(self.coordinator.data.shares),
+        """Return the shared-folder summary and landing-page URL."""
+        protocols = sorted(
+            {
+                protocol
+                for share in self.coordinator.data.shares
+                for protocol in share.protocols
+            }
+        )
+        attributes: dict[str, object] = {
             "shares": [share.name for share in self.coordinator.data.shares],
+            "protocols": protocols,
         }
+        if page_url := self._page_url():
+            attributes["open"] = page_url
+        return attributes
 
 
 CPU_CORE_SENSOR = SensorEntityDescription(
@@ -717,10 +727,12 @@ class TerraMasterShareSensor(
                     "volume": storage.volume.name,
                     "volume_mountpoint": storage.volume.mountpoint,
                     "filesystem": storage.volume.filesystem,
-                    "capacity_bytes": storage.volume.size,
-                    "used_bytes": storage.volume.used,
-                    "available_bytes": storage.volume.available,
-                    "usage_percent": storage.volume.usage,
+                    "capacity_gb": round(storage.volume.size / 1_000_000_000, 2),
+                    "used_gb": round(storage.volume.used / 1_000_000_000, 2),
+                    "available_gb": round(
+                        storage.volume.available / 1_000_000_000, 2
+                    ),
+                    "usage_percent": round(storage.volume.usage, 1),
                 }
             )
 
@@ -754,7 +766,7 @@ class TerraMasterShareSensor(
             base_url = _get_home_assistant_url(self._home_assistant)
 
             if base_url is not None:
-                attributes["open_share"] = share_page_url(
+                attributes["open"] = share_page_url(
                     base_url,
                     self._entry_id,
                     self._share_token,
