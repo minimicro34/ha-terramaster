@@ -5,65 +5,180 @@
       "user": {
         "title": "Connect to TerraMaster",
         "description": "SSH must be enabled in TOS. The server host key is saved on first connection and verified thereafter.",
-        "data": {"host": "Host", "port": "SSH port", "username": "Username", "password": "Password"}
+        "data": {
+          "host": "Host",
+          "port": "SSH port",
+          "username": "Username",
+          "password": "Password"
+        }
       },
       "reauth_confirm": {
         "title": "Reauthenticate TerraMaster",
         "description": "Enter valid SSH credentials. Continuing also trusts the NAS's current SSH host key.",
-        "data": {"username": "Username", "password": "Password"}
+        "data": {
+          "username": "Username",
+          "password": "Password"
+        }
       }
     },
-    "error": {"cannot_connect": "Failed to connect", "invalid_auth": "Invalid authentication", "unknown": "Unexpected error"},
-    "abort": {"already_configured": "This TerraMaster is already configured", "reauth_successful": "Reauthentication was successful", "reauth_entry_missing": "The configuration entry no longer exists"}
+    "error": {
+      "cannot_connect": "Failed to connect",
+      "invalid_auth": "Invalid authentication",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This TerraMaster is already configured",
+      "reauth_successful": "Reauthentication was successful",
+      "reauth_entry_missing": "The configuration entry no longer exists"
+    }
   },
   "entity": {
     "sensor": {
-      "model": {"name": "Model"},
-      "platform": {"name": "SoC / hardware platform"},
-      "tos_version": {"name": "TOS version"},
-      "linux_distribution": {"name": "Linux distribution"},
-      "kernel_version": {"name": "Linux kernel version"},
-      "uptime": {"name": "Uptime"},
-      "last_restart": {"name": "Last restart"},
-      "cpu_model": {"name": "Processor model"},
-      "cpu_usage": {"name": "CPU usage"},
-      "cpu_core_usage": {"name": "CPU core {core}"},
-      "memory_total": {"name": "Total memory"},
-      "memory_available": {"name": "Available memory"},
-      "memory_usage": {"name": "Memory usage"},
-      "temperature": {"name": "Temperature"},
-      "disk_usage": {"name": "Disk usage"},
-      "disk_model": {"name": "Model"},
-      "capacity": {"name": "Capacity"},
-      "state": {"name": "State"},
-      "smart_status": {"name": "SMART status"},
-      "power_on_time": {"name": "Power-on time"},
-      "power_cycles": {"name": "Power cycles"},
-      "start_stop_cycles": {"name": "Start/stop cycles"},
-      "load_cycles": {"name": "Load cycles"},
-      "spin_retries": {"name": "Spin retries"},
-      "reallocated_sectors": {"name": "Reallocated sectors"},
-      "reallocated_events": {"name": "Reallocation events"},
-      "pending_sectors": {"name": "Pending sectors"},
-      "offline_uncorrectable": {"name": "Offline uncorrectable sectors"},
-      "udma_crc_errors": {"name": "UDMA CRC errors"},
-      "raid_level": {"name": "RAID level"},
-      "degraded_devices": {"name": "Degraded devices"},
-      "sync_action": {"name": "Synchronization action"},
-      "sync_progress": {"name": "Synchronization progress"},
-      "filesystem": {"name": "Filesystem"},
-      "mountpoint": {"name": "Mount point"},
-      "used_space": {"name": "Used space"},
-      "available_space": {"name": "Available space"},
-      "storage_role": {"name": "Storage role"},
-      "link_state": {"name": "Link state"},
-      "link_speed": {"name": "Link speed"},
-      "received_data": {"name": "Received data"},
-      "sent_data": {"name": "Sent data"},
-      "receive_rate": {"name": "Receive rate"},
-      "transmit_rate": {"name": "Transmit rate"},
-      "service_status": {"name": "{service} service", "state": {"enabled": "Enabled", "disabled": "Disabled"}},
-      "shared_folder": {"name": "Shared folder {share}"}
+      "model": {
+        "name": "Model"
+      },
+      "platform": {
+        "name": "SoC / hardware platform"
+      },
+      "tos_version": {
+        "name": "TOS version"
+      },
+      "linux_distribution": {
+        "name": "Linux distribution"
+      },
+      "kernel_version": {
+        "name": "Linux kernel version"
+      },
+      "uptime": {
+        "name": "Uptime"
+      },
+      "last_restart": {
+        "name": "Last restart"
+      },
+      "cpu_model": {
+        "name": "Processor model"
+      },
+      "cpu_usage": {
+        "name": "CPU usage"
+      },
+      "cpu_core_usage": {
+        "name": "CPU core {core}"
+      },
+      "memory_total": {
+        "name": "Total memory"
+      },
+      "memory_available": {
+        "name": "Available memory"
+      },
+      "memory_usage": {
+        "name": "Memory usage"
+      },
+      "temperature": {
+        "name": "Temperature"
+      },
+      "disk_usage": {
+        "name": "Disk usage"
+      },
+      "disk_model": {
+        "name": "Model"
+      },
+      "capacity": {
+        "name": "Capacity"
+      },
+      "state": {
+        "name": "State"
+      },
+      "smart_status": {
+        "name": "SMART status"
+      },
+      "power_on_time": {
+        "name": "Power-on time"
+      },
+      "power_cycles": {
+        "name": "Power cycles"
+      },
+      "start_stop_cycles": {
+        "name": "Start/stop cycles"
+      },
+      "load_cycles": {
+        "name": "Load cycles"
+      },
+      "spin_retries": {
+        "name": "Spin retries"
+      },
+      "reallocated_sectors": {
+        "name": "Reallocated sectors"
+      },
+      "reallocated_events": {
+        "name": "Reallocation events"
+      },
+      "pending_sectors": {
+        "name": "Pending sectors"
+      },
+      "offline_uncorrectable": {
+        "name": "Offline uncorrectable sectors"
+      },
+      "udma_crc_errors": {
+        "name": "UDMA CRC errors"
+      },
+      "raid_level": {
+        "name": "RAID level"
+      },
+      "degraded_devices": {
+        "name": "Degraded devices"
+      },
+      "sync_action": {
+        "name": "Synchronization action"
+      },
+      "sync_progress": {
+        "name": "Synchronization progress"
+      },
+      "filesystem": {
+        "name": "Filesystem"
+      },
+      "mountpoint": {
+        "name": "Mount point"
+      },
+      "used_space": {
+        "name": "Used space"
+      },
+      "available_space": {
+        "name": "Available space"
+      },
+      "storage_role": {
+        "name": "Storage role"
+      },
+      "link_state": {
+        "name": "Link state"
+      },
+      "link_speed": {
+        "name": "Link speed"
+      },
+      "received_data": {
+        "name": "Received data"
+      },
+      "sent_data": {
+        "name": "Sent data"
+      },
+      "receive_rate": {
+        "name": "Receive rate"
+      },
+      "transmit_rate": {
+        "name": "Transmit rate"
+      },
+      "service_status": {
+        "name": "{service} service",
+        "state": {
+          "enabled": "Enabled",
+          "disabled": "Disabled"
+        }
+      },
+      "shared_folder": {
+        "name": "Shared folder {share}"
+      },
+      "shared_folders_page": {
+        "name": "Shared folders"
+      }
     }
   }
 }
