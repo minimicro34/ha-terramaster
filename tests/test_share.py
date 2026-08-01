@@ -134,7 +134,7 @@ async def test_share_view() -> None:
     assert "/mnt/md0/My share" in response.text
     assert "Ouvrir avec SMB / CIFS" in response.text
     assert "vg0-lv0" in response.text
-    assert "md0 Â· RAID1" in response.text
+    assert "md0 · RAID1" in response.text
     assert "820.00 GB" in response.text
     assert "admin" in response.text
     assert response.headers["X-Content-Type-Options"] == "nosniff"
