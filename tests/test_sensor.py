@@ -15,7 +15,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.terramaster.const import DOMAIN
+from custom_components.terramaster.const import CONF_SHARE_TOKEN, DOMAIN
 from custom_components.terramaster.coordinator import TerraMasterDataUpdateCoordinator
 from custom_components.terramaster.models import (
     TerraMasterCpuCore,
@@ -127,6 +127,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
             CONF_PORT: 9222,
             CONF_USERNAME: "admin",
             CONF_PASSWORD: "secret",
+            CONF_SHARE_TOKEN: "test-share-token",
         },
         unique_id="nas.local:9222",
     )
@@ -206,6 +207,18 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
             )
             == 2
         )
+
+        shares_page_entity = next(
+            entity
+            for entity in entities
+            if entity.unique_id is not None
+            and entity.unique_id.endswith("shared_folders_page")
+        )
+        assert shares_page_entity.native_value == (
+            "https://ha.example/api/terramaster/share?"
+            f"entry_id={entry.entry_id}&token=test-share-token"
+        )
+
         share_entity = next(
             entity
             for entity in entities
@@ -214,23 +227,30 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         )
         assert share_entity.device_info["name"] == "NAS-NICO"
         assert share_entity.device_info["configuration_url"] == (
-            f"https://ha.example/api/terramaster/share?entry_id={entry.entry_id}"
+            "https://ha.example/api/terramaster/share?"
+            f"entry_id={entry.entry_id}&token=test-share-token"
         )
         assert share_entity.native_value == "/mnt/md0/public"
+
         with patch(
             "custom_components.terramaster.sensor.get_url",
             return_value="https://ha.example",
         ):
             attributes = share_entity.extra_state_attributes
-        assert attributes["smb_url"] == "smb://nas.local/public"
+
+        assert attributes is not None
+        assert attributes["smb_url"] == "smb://admin@nas.local/public"
         assert attributes["nfs_url"] == "nfs://nas.local/mnt/md0/public"
         assert attributes["volume"] == "vg0-lv0"
         assert attributes["filesystem"] == "btrfs"
         assert attributes["available_bytes"] == 536612429824
         assert attributes["raid"] == "md0"
         assert attributes["raid_level"] == "raid1"
-        assert attributes["open_share"].startswith(
+        assert attributes["open_share"] == (
             "https://ha.example/api/terramaster/share?"
+            f"entry_id={entry.entry_id}"
+            "&token=test-share-token"
+            "&share=public"
         )
         assert "afp_url" not in attributes
     finally:
