@@ -256,7 +256,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         assert "available_bytes" not in attributes
         assert attributes["raid"] == "md0"
         assert attributes["raid_level"] == "raid1"
-        assert attributes["open_share"] == (
+        assert attributes["open"] == (
             "https://ha.example/api/terramaster/share?"
             f"entry_id={entry.entry_id}"
             "&token=test-share-token"
