@@ -5,67 +5,179 @@
       "user": {
         "title": "Connexion à TerraMaster",
         "description": "SSH doit être activé dans TOS. La clé du serveur est enregistrée à la première connexion, puis vérifiée à chaque connexion suivante.",
-        "data": {"host": "Hôte", "port": "Port SSH", "username": "Nom d’utilisateur", "password": "Mot de passe"}
+        "data": {
+          "host": "Hôte",
+          "port": "Port SSH",
+          "username": "Nom d’utilisateur",
+          "password": "Mot de passe"
+        }
       },
       "reauth_confirm": {
         "title": "Réauthentifier TerraMaster",
         "description": "Saisissez des identifiants SSH valides. Continuer approuve également la clé SSH actuelle du NAS.",
-        "data": {"username": "Nom d’utilisateur", "password": "Mot de passe"}
+        "data": {
+          "username": "Nom d’utilisateur",
+          "password": "Mot de passe"
+        }
       }
     },
-    "error": {"cannot_connect": "Échec de la connexion", "invalid_auth": "Authentification incorrecte", "unknown": "Erreur inattendue"},
-    "abort": {"already_configured": "Ce TerraMaster est déjà configuré", "reauth_successful": "La réauthentification a réussi", "reauth_entry_missing": "L’entrée de configuration n’existe plus"}
+    "error": {
+      "cannot_connect": "Échec de la connexion",
+      "invalid_auth": "Authentification incorrecte",
+      "unknown": "Erreur inattendue"
+    },
+    "abort": {
+      "already_configured": "Ce TerraMaster est déjà configuré",
+      "reauth_successful": "La réauthentification a réussi",
+      "reauth_entry_missing": "L’entrée de configuration n’existe plus"
+    }
   },
   "entity": {
     "sensor": {
-      "model": {"name": "Modèle"},
-      "platform": {"name": "SoC / plateforme matérielle"},
-      "tos_version": {"name": "Version de TOS"},
-      "linux_distribution": {"name": "Distribution Linux"},
-      "kernel_version": {"name": "Version du noyau Linux"},
-      "uptime": {"name": "Durée de fonctionnement"},
-      "last_restart": {"name": "Dernier redémarrage"},
-      "cpu_model": {"name": "Modèle du processeur"},
-      "cpu_usage": {"name": "Utilisation du processeur"},
-      "cpu_core_usage": {"name": "Cœur processeur {core}"},
-      "memory_total": {"name": "Mémoire totale"},
-      "memory_available": {"name": "Mémoire disponible"},
-      "memory_usage": {"name": "Utilisation de la mémoire"},
-      "temperature": {"name": "Température"},
-      "disk_usage": {"name": "Utilisation des disques"},
-      "disk_model": {"name": "Modèle"},
-      "capacity": {"name": "Capacité"},
-      "state": {"name": "État"},
-      "smart_status": {"name": "État SMART"},
-      "power_on_time": {"name": "Durée de fonctionnement"},
-      "power_cycles": {"name": "Cycles d’alimentation"},
-      "start_stop_cycles": {"name": "Cycles démarrage/arrêt"},
-      "load_cycles": {"name": "Cycles de chargement"},
-      "spin_retries": {"name": "Tentatives de rotation"},
-      "reallocated_sectors": {"name": "Secteurs réalloués"},
-      "reallocated_events": {"name": "Événements de réallocation"},
-      "pending_sectors": {"name": "Secteurs en attente"},
-      "offline_uncorrectable": {"name": "Secteurs non corrigeables"},
-      "udma_crc_errors": {"name": "Erreurs CRC UDMA"},
-      "raid_level": {"name": "Niveau RAID"},
-      "degraded_devices": {"name": "Disques dégradés"},
-      "sync_action": {"name": "Action de synchronisation"},
-      "sync_progress": {"name": "Progression de la synchronisation"},
-      "filesystem": {"name": "Système de fichiers"},
-      "mountpoint": {"name": "Point de montage"},
-      "used_space": {"name": "Espace utilisé"},
-      "available_space": {"name": "Espace disponible"},
-      "storage_role": {"name": "Rôle du stockage"},
-      "link_state": {"name": "État de la liaison"},
-      "link_speed": {"name": "Vitesse de la liaison"},
-      "received_data": {"name": "Données reçues"},
-      "sent_data": {"name": "Données envoyées"},
-      "receive_rate": {"name": "Débit entrant"},
-      "transmit_rate": {"name": "Débit sortant"},
-      "service_status": {"name": "Service {service}", "state": {"enabled": "Activé", "disabled": "Désactivé"}},
-      "shared_folder": {"name": "Dossier partagé {share}"},
+      "model": {
+        "name": "Modèle"
+      },
+      "platform": {
+        "name": "SoC / plateforme matérielle"
+      },
+      "tos_version": {
+        "name": "Version de TOS"
+      },
+      "linux_distribution": {
+        "name": "Distribution Linux"
+      },
+      "kernel_version": {
+        "name": "Version du noyau Linux"
+      },
+      "uptime": {
+        "name": "Durée de fonctionnement"
+      },
+      "last_restart": {
+        "name": "Dernier redémarrage"
+      },
+      "cpu_model": {
+        "name": "Modèle du processeur"
+      },
+      "cpu_usage": {
+        "name": "Utilisation du processeur"
+      },
+      "cpu_core_usage": {
+        "name": "Cœur processeur {core}"
+      },
+      "memory_total": {
+        "name": "Mémoire totale"
+      },
+      "memory_available": {
+        "name": "Mémoire disponible"
+      },
+      "memory_usage": {
+        "name": "Utilisation de la mémoire"
+      },
+      "temperature": {
+        "name": "Température"
+      },
+      "disk_usage": {
+        "name": "Utilisation des disques"
+      },
+      "disk_model": {
+        "name": "Modèle"
+      },
+      "capacity": {
+        "name": "Capacité"
+      },
+      "state": {
+        "name": "État"
+      },
+      "smart_status": {
+        "name": "État SMART"
+      },
+      "power_on_time": {
+        "name": "Durée de fonctionnement"
+      },
+      "power_cycles": {
+        "name": "Cycles d’alimentation"
+      },
+      "start_stop_cycles": {
+        "name": "Cycles démarrage/arrêt"
+      },
+      "load_cycles": {
+        "name": "Cycles de chargement"
+      },
+      "spin_retries": {
+        "name": "Tentatives de rotation"
+      },
+      "reallocated_sectors": {
+        "name": "Secteurs réalloués"
+      },
+      "reallocated_events": {
+        "name": "Événements de réallocation"
+      },
+      "pending_sectors": {
+        "name": "Secteurs en attente"
+      },
+      "offline_uncorrectable": {
+        "name": "Secteurs non corrigeables"
+      },
+      "udma_crc_errors": {
+        "name": "Erreurs CRC UDMA"
+      },
+      "raid_level": {
+        "name": "Niveau RAID"
+      },
+      "degraded_devices": {
+        "name": "Disques dégradés"
+      },
+      "sync_action": {
+        "name": "Action de synchronisation"
+      },
+      "sync_progress": {
+        "name": "Progression de la synchronisation"
+      },
+      "filesystem": {
+        "name": "Système de fichiers"
+      },
+      "mountpoint": {
+        "name": "Point de montage"
+      },
+      "used_space": {
+        "name": "Espace utilisé"
+      },
+      "available_space": {
+        "name": "Espace disponible"
+      },
+      "storage_role": {
+        "name": "Rôle du stockage"
+      },
+      "link_state": {
+        "name": "État de la liaison"
+      },
+      "link_speed": {
+        "name": "Vitesse de la liaison"
+      },
+      "received_data": {
+        "name": "Données reçues"
+      },
+      "sent_data": {
+        "name": "Données envoyées"
+      },
+      "receive_rate": {
+        "name": "Débit entrant"
+      },
+      "transmit_rate": {
+        "name": "Débit sortant"
+      },
+      "service_status": {
+        "name": "Service {service}",
+        "state": {
+          "enabled": "Activé",
+          "disabled": "Désactivé"
+        }
+      },
+      "shared_folder": {
+        "name": "Dossier partagé {share}"
+      },
       "shared_folders_page": {
-          "name": "Page des dossiers partagés"
+        "name": "Dossiers partagés"
       }
     }
   }
