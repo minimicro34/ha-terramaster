@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/minimicro34/ha-terramaster/issues",
   "loggers": ["asyncssh"],
   "requirements": ["asyncssh==2.24.0"],
-  "version": "0.3.1"
+  "version": "1.0.0"
 }
