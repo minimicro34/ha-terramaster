@@ -16,6 +16,7 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.const import (
     CONF_HOST,
+    CONF_USERNAME,
     PERCENTAGE,
     UnitOfDataRate,
     UnitOfInformation,
@@ -31,7 +32,7 @@ from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import TerraMasterConfigEntry
-from .const import DOMAIN
+from .const import CONF_SHARE_TOKEN, DOMAIN
 from .coordinator import TerraMasterDataUpdateCoordinator
 from .models import (
     TerraMasterCpuCore,
@@ -188,20 +189,29 @@ _SUGGESTED_UNIT_MIGRATIONS = {
 def _migrate_registry_defaults(hass: HomeAssistant) -> None:
     """Migrate integration defaults without overriding user-selected units."""
     registry = er.async_get(hass)
+
     for registry_entry in list(registry.entities.values()):
         if registry_entry.platform != DOMAIN:
             continue
+
         if (
             registry_entry.unique_id.endswith("_memory_total")
             and registry_entry.entity_category == EntityCategory.DIAGNOSTIC
         ):
-            registry.async_update_entity(registry_entry.entity_id, entity_category=None)
+            registry.async_update_entity(
+                registry_entry.entity_id,
+                entity_category=None,
+            )
+
         if "unit_of_measurement" in registry_entry.options.get("sensor", {}):
             continue
+
         private_options: Mapping[str, Any] = registry_entry.options.get(
-            "sensor.private", {}
+            "sensor.private",
+            {},
         )
         current_unit = private_options.get("suggested_unit_of_measurement")
+
         for suffix, new_unit in _SUGGESTED_UNIT_MIGRATIONS.items():
             if registry_entry.unique_id.endswith(suffix) and current_unit != new_unit:
                 registry.async_update_entity_options(
@@ -212,12 +222,24 @@ def _migrate_registry_defaults(hass: HomeAssistant) -> None:
                 break
 
 
+def _get_home_assistant_url(hass: HomeAssistant) -> str | None:
+    """Return an external or internal Home Assistant URL."""
+    try:
+        return get_url(hass, prefer_external=True)
+    except NoURLAvailableError:
+        try:
+            return get_url(hass, prefer_external=False)
+        except NoURLAvailableError:
+            return None
+
+
 def _nas_device_info(
     coordinator: TerraMasterDataUpdateCoordinator,
     entry: TerraMasterConfigEntry,
 ) -> DeviceInfo:
     """Return the common device information for the main NAS."""
     nas_id = entry.unique_id or entry.entry_id
+
     device_info = DeviceInfo(
         identifiers={(DOMAIN, nas_id)},
         name=coordinator.data.hostname,
@@ -225,12 +247,17 @@ def _nas_device_info(
         model=coordinator.data.model,
         sw_version=coordinator.data.tos_version,
     )
-    try:
-        base_url = get_url(coordinator.hass, prefer_external=True)
-    except NoURLAvailableError:
-        pass
-    else:
-        device_info["configuration_url"] = share_page_url(base_url, entry.entry_id)
+
+    share_token = entry.data.get(CONF_SHARE_TOKEN)
+    base_url = _get_home_assistant_url(coordinator.hass)
+
+    if base_url is not None and isinstance(share_token, str) and share_token:
+        device_info["configuration_url"] = share_page_url(
+            base_url,
+            entry.entry_id,
+            share_token,
+        )
+
     return device_info
 
 
@@ -241,32 +268,55 @@ async def async_setup_entry(
 ) -> None:
     """Set up TerraMaster sensors."""
     _migrate_registry_defaults(hass)
+
     async_add_entities(
         TerraMasterSensor(entry.runtime_data, entry, description)
         for description in SENSORS
     )
+
+    async_add_entities(
+        [
+            TerraMasterSharesPageSensor(
+                entry.runtime_data,
+                entry,
+            )
+        ]
+    )
+
     async_add_entities(
         TerraMasterServiceSensor(entry.runtime_data, entry, service_name)
         for service_name in ("ssh", "telnet", "snmp")
     )
+
     known: set[tuple[str, str, str]] = set()
     known_cpu_cores: set[str] = set()
     known_shares: set[str] = set()
 
     def async_discover_entities() -> None:
         entities: list[SensorEntity] = []
+
         for share in entry.runtime_data.data.shares:
             if share.name not in known_shares:
                 known_shares.add(share.name)
                 entities.append(
-                    TerraMasterShareSensor(entry.runtime_data, entry, share.name)
+                    TerraMasterShareSensor(
+                        entry.runtime_data,
+                        entry,
+                        share.name,
+                    )
                 )
+
         for core in entry.runtime_data.data.cpu_cores:
             if core.name not in known_cpu_cores:
                 known_cpu_cores.add(core.name)
                 entities.append(
-                    TerraMasterCpuCoreSensor(entry.runtime_data, entry, core.name)
+                    TerraMasterCpuCoreSensor(
+                        entry.runtime_data,
+                        entry,
+                        core.name,
+                    )
                 )
+
         for kind, objects, descriptions in (
             ("disk", entry.runtime_data.data.disks, DISK_SENSORS),
             ("raid", entry.runtime_data.data.raids, RAID_SENSORS),
@@ -275,7 +325,12 @@ async def async_setup_entry(
         ):
             for storage_object in objects:
                 for description in descriptions:
-                    key = (kind, storage_object.name, description.key)
+                    key = (
+                        kind,
+                        storage_object.name,
+                        description.key,
+                    )
+
                     if key not in known:
                         known.add(key)
                         entities.append(
@@ -287,17 +342,22 @@ async def async_setup_entry(
                                 description,
                             )
                         )
+
         if entities:
             async_add_entities(entities)
 
     async_discover_entities()
+
     entry.async_on_unload(
-        entry.runtime_data.async_add_listener(async_discover_entities)
+        entry.runtime_data.async_add_listener(
+            async_discover_entities,
+        )
     )
 
 
 class TerraMasterSensor(
-    CoordinatorEntity[TerraMasterDataUpdateCoordinator], SensorEntity
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
 ):
     """Representation of a TerraMaster sensor."""
 
@@ -311,10 +371,16 @@ class TerraMasterSensor(
         description: TerraMasterSensorEntityDescription,
     ) -> None:
         super().__init__(coordinator)
+
         self.entity_description = description
+
         device_id = entry.unique_id or entry.entry_id
+
         self._attr_unique_id = f"{device_id}_{description.key}"
-        self._attr_device_info = _nas_device_info(coordinator, entry)
+        self._attr_device_info = _nas_device_info(
+            coordinator,
+            entry,
+        )
 
     @property
     def available(self) -> bool:
@@ -325,6 +391,80 @@ class TerraMasterSensor(
     def native_value(self) -> Any:
         """Return the current sensor value."""
         return self.entity_description.value_fn(self.coordinator.data)
+
+
+SHARES_PAGE_SENSOR = SensorEntityDescription(
+    key="shared_folders_page",
+    translation_key="shared_folders_page",
+    icon="mdi:folder-network-outline",
+)
+
+
+class TerraMasterSharesPageSensor(
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
+):
+    """Link to the TerraMaster shared-folders page."""
+
+    entity_description = SHARES_PAGE_SENSOR
+    _attr_has_entity_name = True
+
+    def __init__(
+        self,
+        coordinator: TerraMasterDataUpdateCoordinator,
+        entry: TerraMasterConfigEntry,
+    ) -> None:
+        super().__init__(coordinator)
+
+        self._home_assistant = coordinator.hass
+        self._entry_id = entry.entry_id
+        self._share_token = entry.data.get(CONF_SHARE_TOKEN)
+
+        nas_id = entry.unique_id or entry.entry_id
+
+        self._attr_unique_id = f"{nas_id}_shared_folders_page"
+        self._attr_device_info = _nas_device_info(
+            coordinator,
+            entry,
+        )
+
+    def _page_url(self) -> str | None:
+        """Build the shared-folders page URL."""
+        if (
+            not isinstance(self._share_token, str)
+            or not self._share_token
+            or not self.coordinator.data.shares
+        ):
+            return None
+
+        base_url = _get_home_assistant_url(self._home_assistant)
+
+        if base_url is None:
+            return None
+
+        return share_page_url(
+            base_url,
+            self._entry_id,
+            self._share_token,
+        )
+
+    @property
+    def available(self) -> bool:
+        """Return whether the shared-folders page is available."""
+        return super().available and self._page_url() is not None
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the shared-folders page URL."""
+        return self._page_url()
+
+    @property
+    def extra_state_attributes(self) -> dict[str, object]:
+        """Return detected shared-folder information."""
+        return {
+            "share_count": len(self.coordinator.data.shares),
+            "shares": [share.name for share in self.coordinator.data.shares],
+        }
 
 
 CPU_CORE_SENSOR = SensorEntityDescription(
@@ -338,7 +478,8 @@ CPU_CORE_SENSOR = SensorEntityDescription(
 
 
 class TerraMasterCpuCoreSensor(
-    CoordinatorEntity[TerraMasterDataUpdateCoordinator], SensorEntity
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
 ):
     """Utilization sensor for a dynamically discovered logical CPU core."""
 
@@ -352,17 +493,26 @@ class TerraMasterCpuCoreSensor(
         core_name: str,
     ) -> None:
         super().__init__(coordinator)
+
         self._core_name = core_name
+
         nas_id = entry.unique_id or entry.entry_id
         core_number = core_name.removeprefix("cpu")
         display_number = (
             str(int(core_number) + 1) if core_number.isdigit() else core_name
         )
+
         self._attr_unique_id = f"{nas_id}_{core_name}_usage"
-        self._attr_translation_placeholders = {"core": display_number}
-        self._attr_device_info = _nas_device_info(coordinator, entry)
+        self._attr_translation_placeholders = {
+            "core": display_number,
+        }
+        self._attr_device_info = _nas_device_info(
+            coordinator,
+            entry,
+        )
 
     def _core(self) -> TerraMasterCpuCore | None:
+        """Return the matching CPU core."""
         return next(
             (
                 core
@@ -376,7 +526,12 @@ class TerraMasterCpuCoreSensor(
     def available(self) -> bool:
         """Return whether the core utilization sample is available."""
         core = self._core()
-        return super().available and core is not None and core.usage is not None
+
+        return (
+            super().available
+            and core is not None
+            and core.usage is not None
+        )
 
     @property
     def native_value(self) -> float | None:
@@ -396,7 +551,8 @@ SERVICE_SENSOR = SensorEntityDescription(
 
 
 class TerraMasterServiceSensor(
-    CoordinatorEntity[TerraMasterDataUpdateCoordinator], SensorEntity
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
 ):
     """Status and listening ports for a TOS management service."""
 
@@ -410,13 +566,22 @@ class TerraMasterServiceSensor(
         service_name: str,
     ) -> None:
         super().__init__(coordinator)
+
         self._service_name = service_name
+
         nas_id = entry.unique_id or entry.entry_id
+
         self._attr_unique_id = f"{nas_id}_{service_name}_service"
-        self._attr_translation_placeholders = {"service": service_name.upper()}
-        self._attr_device_info = _nas_device_info(coordinator, entry)
+        self._attr_translation_placeholders = {
+            "service": service_name.upper(),
+        }
+        self._attr_device_info = _nas_device_info(
+            coordinator,
+            entry,
+        )
 
     def _service(self) -> TerraMasterService | None:
+        """Return the matching service."""
         return next(
             (
                 service
@@ -430,23 +595,35 @@ class TerraMasterServiceSensor(
     def available(self) -> bool:
         """Return whether service detection was available."""
         service = self._service()
-        return super().available and service is not None and service.enabled is not None
+
+        return (
+            super().available
+            and service is not None
+            and service.enabled is not None
+        )
 
     @property
     def native_value(self) -> str | None:
         """Return enabled or disabled."""
         service = self._service()
+
         if service is None or service.enabled is None:
             return None
+
         return "enabled" if service.enabled else "disabled"
 
     @property
     def extra_state_attributes(self) -> dict[str, object] | None:
         """Return listening port and protocol details."""
         service = self._service()
+
         if service is None:
             return None
-        return {"ports": list(service.ports), "protocols": list(service.protocols)}
+
+        return {
+            "ports": list(service.ports),
+            "protocols": list(service.protocols),
+        }
 
 
 SHARE_SENSOR = SensorEntityDescription(
@@ -458,7 +635,8 @@ SHARE_SENSOR = SensorEntityDescription(
 
 
 class TerraMasterShareSensor(
-    CoordinatorEntity[TerraMasterDataUpdateCoordinator], SensorEntity
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
 ):
     """A TOS shared folder attached to the main NAS device."""
 
@@ -472,16 +650,27 @@ class TerraMasterShareSensor(
         share_name: str,
     ) -> None:
         super().__init__(coordinator)
+
         self._share_name = share_name
         self._home_assistant = coordinator.hass
         self._host = str(entry.data[CONF_HOST])
+        self._username = str(entry.data[CONF_USERNAME])
         self._entry_id = entry.entry_id
+        self._share_token = entry.data.get(CONF_SHARE_TOKEN)
+
         nas_id = entry.unique_id or entry.entry_id
+
         self._attr_unique_id = f"{nas_id}_share_{share_name}"
-        self._attr_translation_placeholders = {"share": share_name}
-        self._attr_device_info = _nas_device_info(coordinator, entry)
+        self._attr_translation_placeholders = {
+            "share": share_name,
+        }
+        self._attr_device_info = _nas_device_info(
+            coordinator,
+            entry,
+        )
 
     def _share(self) -> TerraMasterShare | None:
+        """Return the matching shared folder."""
         return next(
             (
                 share
@@ -506,8 +695,10 @@ class TerraMasterShareSensor(
     def extra_state_attributes(self) -> dict[str, object] | None:
         """Return shared-folder details."""
         share = self._share()
+
         if share is None:
             return None
+
         attributes: dict[str, object] = {
             "device": share.device,
             "type": share.share_type,
@@ -515,7 +706,12 @@ class TerraMasterShareSensor(
             "recycle_bin": share.recycle_bin,
             "protocols": list(share.protocols),
         }
-        storage = resolve_share_storage(self.coordinator.data, share)
+
+        storage = resolve_share_storage(
+            self.coordinator.data,
+            share,
+        )
+
         if storage.volume is not None:
             attributes.update(
                 {
@@ -528,6 +724,7 @@ class TerraMasterShareSensor(
                     "usage_percent": storage.volume.usage,
                 }
             )
+
         if storage.raid is not None:
             attributes.update(
                 {
@@ -536,17 +733,35 @@ class TerraMasterShareSensor(
                     "raid_state": storage.raid.state,
                 }
             )
-        urls = share_connection_urls(self._host, share)
-        attributes.update({f"{protocol}_url": url for protocol, url in urls.items()})
-        if urls:
-            try:
-                base_url = get_url(self._home_assistant, prefer_external=True)
-            except NoURLAvailableError:
-                pass
-            else:
+
+        urls = share_connection_urls(
+            self._host,
+            share,
+            self._username,
+        )
+
+        attributes.update(
+            {
+                f"{protocol}_url": url
+                for protocol, url in urls.items()
+            }
+        )
+
+        if (
+            urls
+            and isinstance(self._share_token, str)
+            and self._share_token
+        ):
+            base_url = _get_home_assistant_url(self._home_assistant)
+
+            if base_url is not None:
                 attributes["open_share"] = share_page_url(
-                    base_url, self._entry_id, share.name
+                    base_url,
+                    self._entry_id,
+                    self._share_token,
+                    share.name,
                 )
+
         return attributes
 
 
@@ -557,7 +772,11 @@ class TerraMasterStorageSensorDescription(SensorEntityDescription):
     value_fn: Callable[[Any], Any]
 
 
-def _attribute_value(storage_object: Any, *, attribute: str) -> object:
+def _attribute_value(
+    storage_object: Any,
+    *,
+    attribute: str,
+) -> object:
     """Return a named attribute from a storage data object."""
     return getattr(storage_object, attribute)
 
@@ -627,7 +846,10 @@ DISK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
             icon=icon,
             state_class=SensorStateClass.TOTAL,
             entity_category=EntityCategory.DIAGNOSTIC,
-            value_fn=partial(_attribute_value, attribute=key),
+            value_fn=partial(
+                _attribute_value,
+                attribute=key,
+            ),
         )
         for key, translation_key, icon in (
             ("power_cycle_count", "power_cycles", "mdi:power-cycle"),
@@ -664,6 +886,7 @@ DISK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
     ),
 )
 
+
 RAID_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
     TerraMasterStorageSensorDescription(
         key="role",
@@ -673,10 +896,14 @@ RAID_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
         value_fn=lambda raid: "system" if raid.is_system else "user",
     ),
     TerraMasterStorageSensorDescription(
-        key="level", translation_key="raid_level", value_fn=lambda raid: raid.level
+        key="level",
+        translation_key="raid_level",
+        value_fn=lambda raid: raid.level,
     ),
     TerraMasterStorageSensorDescription(
-        key="state", translation_key="state", value_fn=lambda raid: raid.state
+        key="state",
+        translation_key="state",
+        value_fn=lambda raid: raid.state,
     ),
     TerraMasterStorageSensorDescription(
         key="size",
@@ -708,6 +935,7 @@ RAID_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
     ),
 )
 
+
 VOLUME_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
     TerraMasterStorageSensorDescription(
         key="filesystem",
@@ -729,7 +957,10 @@ VOLUME_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
             native_unit_of_measurement=UnitOfInformation.BYTES,
             suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
             state_class=SensorStateClass.MEASUREMENT,
-            value_fn=partial(_attribute_value, attribute=key),
+            value_fn=partial(
+                _attribute_value,
+                attribute=key,
+            ),
         )
         for key, translation_key in (
             ("size", "capacity"),
@@ -745,6 +976,7 @@ VOLUME_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
         value_fn=lambda volume: volume.usage,
     ),
 )
+
 
 NETWORK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
     TerraMasterStorageSensorDescription(
@@ -769,7 +1001,10 @@ NETWORK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
             native_unit_of_measurement=UnitOfInformation.BYTES,
             suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
             state_class=SensorStateClass.TOTAL_INCREASING,
-            value_fn=partial(_attribute_value, attribute=key),
+            value_fn=partial(
+                _attribute_value,
+                attribute=key,
+            ),
         )
         for key, translation_key in (
             ("received_bytes", "received_data"),
@@ -784,7 +1019,10 @@ NETWORK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
             native_unit_of_measurement=UnitOfDataRate.MEGABITS_PER_SECOND,
             state_class=SensorStateClass.MEASUREMENT,
             suggested_display_precision=3,
-            value_fn=partial(_attribute_value, attribute=key),
+            value_fn=partial(
+                _attribute_value,
+                attribute=key,
+            ),
         )
         for key, translation_key in (
             ("receive_rate", "receive_rate"),
@@ -795,7 +1033,8 @@ NETWORK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
 
 
 class TerraMasterStorageSensor(
-    CoordinatorEntity[TerraMasterDataUpdateCoordinator], SensorEntity
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
 ):
     """Sensor attached to a dynamically discovered storage device."""
 
@@ -811,27 +1050,47 @@ class TerraMasterStorageSensor(
         description: TerraMasterStorageSensorDescription,
     ) -> None:
         super().__init__(coordinator)
+
         self.entity_description = description
         self._kind = kind
         self._object_name = object_name
+
         nas_id = entry.unique_id or entry.entry_id
         object_id = f"{nas_id}_{kind}_{object_name}"
+
         storage_object = self._object()
+
         is_system = bool(
-            storage_object is not None and getattr(storage_object, "is_system", False)
+            storage_object is not None
+            and getattr(
+                storage_object,
+                "is_system",
+                False,
+            )
         )
+
         device_name = (
             f"System {kind} {object_name}"
             if is_system
             else f"{kind.upper()} {object_name}"
         )
+
         self._attr_unique_id = f"{object_id}_{description.key}"
+
         self._attr_device_info = {
-            "identifiers": {(DOMAIN, object_id)},
+            "identifiers": {
+                (DOMAIN, object_id),
+            },
             "name": device_name,
             "manufacturer": "TerraMaster",
-            "model": f"{'System ' if is_system else ''}{kind.capitalize()}",
-            "via_device": (DOMAIN, nas_id),
+            "model": (
+                f"{'System ' if is_system else ''}"
+                f"{kind.capitalize()}"
+            ),
+            "via_device": (
+                DOMAIN,
+                nas_id,
+            ),
         }
 
     def _object(
@@ -843,8 +1102,20 @@ class TerraMasterStorageSensor(
         | TerraMasterNetwork
         | None
     ):
-        objects = getattr(self.coordinator.data, f"{self._kind}s")
-        return next((item for item in objects if item.name == self._object_name), None)
+        """Return the matching dynamic storage object."""
+        objects = getattr(
+            self.coordinator.data,
+            f"{self._kind}s",
+        )
+
+        return next(
+            (
+                item
+                for item in objects
+                if item.name == self._object_name
+            ),
+            None,
+        )
 
     @property
     def available(self) -> bool:
@@ -855,6 +1126,8 @@ class TerraMasterStorageSensor(
     def native_value(self) -> Any:
         """Return the current storage metric."""
         storage_object = self._object()
+
         if storage_object is None:
             return None
+
         return self.entity_description.value_fn(storage_object)
