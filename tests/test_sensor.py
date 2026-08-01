@@ -214,10 +214,15 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
             if entity.unique_id is not None
             and entity.unique_id.endswith("shared_folders_page")
         )
-        assert shares_page_entity.native_value == (
-            "https://ha.example/api/terramaster/share?"
-            f"entry_id={entry.entry_id}&token=test-share-token"
-        )
+        assert shares_page_entity.native_value == 1
+        assert shares_page_entity.extra_state_attributes == {
+            "shares": ["public"],
+            "protocols": ["nfs", "smb"],
+            "open_shares": (
+                "https://ha.example/api/terramaster/share?"
+                f"entry_id={entry.entry_id}&token=test-share-token"
+            ),
+        }
 
         share_entity = next(
             entity
@@ -243,7 +248,12 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         assert attributes["nfs_url"] == "nfs://nas.local/mnt/md0/public"
         assert attributes["volume"] == "vg0-lv0"
         assert attributes["filesystem"] == "btrfs"
-        assert attributes["available_bytes"] == 536612429824
+        assert attributes["capacity_gb"] == 994.65
+        assert attributes["used_gb"] == 454.68
+        assert attributes["available_gb"] == 536.61
+        assert "capacity_bytes" not in attributes
+        assert "used_bytes" not in attributes
+        assert "available_bytes" not in attributes
         assert attributes["raid"] == "md0"
         assert attributes["raid_level"] == "raid1"
         assert attributes["open_share"] == (
