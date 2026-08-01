@@ -218,7 +218,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         assert shares_page_entity.extra_state_attributes == {
             "shares": ["public"],
             "protocols": ["nfs", "smb"],
-            "open_shares": (
+            "open": (
                 "https://ha.example/api/terramaster/share?"
                 f"entry_id={entry.entry_id}&token=test-share-token"
             ),
