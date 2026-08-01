@@ -79,7 +79,10 @@
       "receive_rate": {"name": "Receive rate"},
       "transmit_rate": {"name": "Transmit rate"},
       "service_status": {"name": "{service} service", "state": {"enabled": "Enabled", "disabled": "Disabled"}},
-      "shared_folder": {"name": "Shared folder {share}"}
+      "shared_folder": {"name": "Shared folder {share}"},
+      "shared_folders_page": {
+          "name": "Shared folders page"
+      }
     }
   }
 }
