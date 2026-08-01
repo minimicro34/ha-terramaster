@@ -1,117 +1,152 @@
 # TerraMaster TOS for Home Assistant
 
-[![GitHub release](https://img.shields.io/github/v/release/minimicro34/ha-terramaster)](https://github.com/minimicro34/ha-terramaster/releases)
-[![HACS](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://hacs.xyz/)
-[![License](https://img.shields.io/github/license/minimicro34/ha-terramaster)](LICENSE)
+Local monitoring of TerraMaster NAS devices from Home Assistant over SSH.
 
-A local-polling Home Assistant custom integration for TerraMaster NAS devices running
-TOS 4. It connects over SSH with `asyncssh`; the default TerraMaster SSH port is
-**9222**.
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://www.hacs.xyz/)
+[![Release](https://img.shields.io/github/v/release/minimicro34/ha-terramaster)](https://github.com/minimicro34/ha-terramaster/releases)
+[![License](https://img.shields.io/github/license/minimicro34/ha-terramaster)](LICENSE)
 
 ## Features
 
-- Local SSH polling on the TerraMaster default port `9222`
-- Home Assistant config and reauthentication flows
-- SSH host-key pinning
-- Dynamic NAS, RAID, physical disk and volume discovery
-- HACS compatible
-- Coordinator-based polling
-- Redacted diagnostics
+- NAS model, TOS version, Linux distribution and kernel
+- Uptime, last restart, CPU, CPU cores, memory and temperature
+- Physical disks and SMART health information
+- RAID arrays, degradation and synchronization progress
+- Volumes, capacity and usage
+- Network interfaces, counters and real-time throughput
+- SSH, Telnet and SNMP service detection
+- Shared-folder discovery from the TOS database
+- SMB, NFS and AFP protocol detection
+- Secure HTML pages for all shares or one selected share
+- English and French translations
 
-## Sensors
+The integration polls locally and does not require a cloud account.
 
-- Commercial NAS model, SoC/hardware platform, TOS version, Linux distribution and
-  kernel version
-- Uptime in days and last TOS restart timestamp
-- Processor model, aggregate CPU usage and dynamic per-core usage
-- Total, available and percentage memory usage
-- System temperature
-- Aggregate disk usage (each physical/block device is counted once)
-- RAID level, state, degraded disks and reconstruction progress
-- Physical disk model, capacity, state and optional SMART health
-- System boot USB and internal TOS RAID health, clearly marked as system storage
-- Per-disk SMART health, temperature, power-on days, power/start/load cycles,
-  reallocated or pending sectors, spin retries and UDMA CRC errors when permitted
-- Per-volume capacity, used space, available space and usage
-- Per-interface link state, negotiated speed, transferred data in GB and live traffic
-  rates in Mbit/s
-- TOS shared folders as entities on the main NAS device, with path, backing device,
-  type, visibility, recycle-bin, volume, RAID, filesystem and space details;
-  connection actions are exposed only for the SMB/CIFS, NFS and AFP protocols
-  currently available on each folder. The main NAS device's native **Open device
-  webpage** action opens an authenticated, mobile-friendly page listing every folder
-  and its available connection buttons
-- SSH, Telnet and SNMP runtime status with listening protocol and port attributes
+## Requirements
 
-The commercial model is read with TOS's privileged `getmodel` utility. The
-SoC/hardware platform and processor model are reported separately. TOS 4 version
-detection includes `/usr/www/version`; the Linux distribution comes from `os-release`
-or `openwrt_release`, and the kernel version from `uname -r`. Temperature still
-depends on the sensors exposed by a particular TOS build.
-When TOS does not expose a metric, its entity remains unavailable without preventing
-other sensors from updating. CPU usage becomes available after the second refresh,
-because aggregate and per-core usage are calculated from two `/proc/stat` samples.
+- Home Assistant with HACS
+- SSH enabled on the TerraMaster NAS
+- A TOS account allowed to connect through SSH
+- Administrator access through `sudo` for optional SMART, service and shared-folder details
 
-NFS must be enabled both as a TOS file service and as an access rule on the individual
-shared folder. The integration checks the running NFS server and the active exports;
-enabling only the global NFS service does not expose every folder through NFS.
+The integration uses read-only commands. The configured password is used for SSH and, when available, read-only `sudo` collection.
 
-## Installation with HACS
+## Installation
 
-1. Open **HACS → Integrations → ⋮ → Custom repositories**.
-2. Add `https://github.com/minimicro34/ha-terramaster` with category
-   **Integration**.
-3. Install **TerraMaster TOS** and restart Home Assistant.
-4. In Home Assistant, open **Settings → Devices & services → Add integration** and
-   select **TerraMaster TOS**.
+### HACS custom repository
 
-For a manual installation, copy `custom_components/terramaster` into Home Assistant's
-`custom_components` directory and restart Home Assistant.
+1. Open **HACS**.
+2. Open the menu and choose **Custom repositories**.
+3. Add `https://github.com/minimicro34/ha-terramaster`.
+4. Select **Integration** as the category.
+5. Install **TerraMaster TOS**.
+6. Restart Home Assistant.
 
-## TerraMaster preparation
+### Manual installation
 
-Enable SSH in the TOS control panel and use the primary TOS administrator account. On
-TOS 4.2.12 and newer, TerraMaster uses the same password for SSH and `sudo`. The
-integration runs one privileged, read-only collection block for the commercial model,
-TOS version, `smartctl -H -A -d sat`, shared-folder database and active sharing
-configuration, and listening service ports; it does not execute write operations. The
-password is sent to `sudo -S` through standard input and is never embedded in the
-remote command or written to logs. A failed sudo authentication is not retried until
-the integration is reloaded, avoiding TOS's temporary lockout after repeated failures.
+Copy:
 
-If the account cannot use `sudo`, the NAS, RAID, volume and unprivileged system
-sensors continue to work; the commercial-model, TOS-version, SMART, shared-folder and
-listening-service details remain unavailable.
+```text
+custom_components/terramaster
+```
 
-The first successful setup stores the NAS public SSH host key. All later connections
-verify that key. If TOS is reinstalled or the key legitimately changes, start the
-integration's reauthentication flow and verify that the change is expected.
+to:
+
+```text
+/config/custom_components/terramaster
+```
+
+and restart Home Assistant.
+
+## Configuration
+
+In Home Assistant:
+
+1. Go to **Settings → Devices & services**.
+2. Select **Add integration**.
+3. Search for **TerraMaster TOS**.
+4. Enter the NAS address, SSH port, username and password.
+
+The default SSH port is `9222`, but the configured TOS port can be used.
+
+The SSH host key is recorded during the first connection and checked on later connections.
+
+## Shared folders
+
+The main **Shared folders** sensor displays the number of detected shares.
+
+Its attributes contain:
+
+- the share names;
+- all detected protocols;
+- `open_shares`, a secure link to the general shared-folder page.
+
+Each individual shared-folder diagnostic entity keeps the detailed information:
+
+- path, type, visibility and recycle-bin state;
+- volume, RAID and filesystem;
+- capacity, used space and available space in decimal GB;
+- usage percentage;
+- SMB, NFS and AFP URLs;
+- `open_share`, a secure link to the HTML page for that share.
+
+Passwords are never included in connection URLs. SMB and AFP URLs can include the configured username so the operating system can request or reuse the password.
+
+## Devices and entities
+
+The NAS is the main Home Assistant device. Physical disks, RAID arrays, volumes and network interfaces are represented as child devices where appropriate.
+
+Some metrics require administrator access. When optional privileged collection is unavailable, the basic NAS metrics continue working.
+
+## Tested hardware
+
+Confirmed during development:
+
+- TerraMaster F2-210
+- TOS 4.2.41
+
+Other TOS 4, TOS 5 and TOS 6 devices may work, but should be treated as unverified until reported by users.
 
 ## Troubleshooting
 
-Enable debug logging:
+### Shared folders are missing
 
-```yaml
-logger:
-  logs:
-    custom_components.terramaster: debug
+Verify that the configured SSH user can run:
+
+```sh
+sudo sqlite3 -separator '|' /etc/base/nasdb   'SELECT foldername,mntpath,device,type,hidden,recycle FROM share;'
 ```
 
-Download diagnostics from the integration page when reporting an issue. Credentials,
-host address, SSH host key, shared-folder names and shared-folder paths are redacted.
+### SMART data is missing
 
-## Development
+Verify that `smartctl` is installed on the NAS and that the configured account can execute it through `sudo`.
 
-The integration targets Home Assistant 2026.7 or newer and Python 3.14. Run the
-repository through `ruff`, `pytest`, `hassfest`, and HACS validation before publishing
-a release.
+### Authentication or host-key error
 
-Pull requests run Ruff, mypy, pytest, Hassfest and HACS validation automatically.
+Remove and re-add the integration only after confirming that the NAS address and SSH host key change are expected.
 
-The SSH implementation is split into `api/client.py`, `api/exceptions.py` and
-`api/parsers.py`. Storage models live in `models.py`; Home Assistant platforms only
-consume coordinator snapshots and do not execute remote commands directly.
+## Privacy and security
+
+- Communication stays on the local network.
+- No cloud service is used.
+- The SSH server host key is pinned.
+- Shared-folder HTML pages use a random token stored in the Home Assistant config entry.
+- Passwords are not exposed in entity attributes or URLs.
+
+## Development checks
+
+```sh
+pytest
+mypy custom_components/terramaster
+ruff check .
+```
+
+## Release history
+
+### 1.0.0
+
+First stable release with system, SMART, RAID, volume, network, services and shared-folder monitoring.
 
 ## License
 
-MIT
+See [LICENSE](LICENSE).
