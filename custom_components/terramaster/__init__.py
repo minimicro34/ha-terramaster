@@ -8,14 +8,16 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.helpers import config_validation as cv
 
 from .api import TerraMasterApiClient
-from .const import CONF_HOST_KEY, CONF_SHARE_TOKEN, PLATFORMS
+from .const import CONF_HOST_KEY, CONF_SHARE_TOKEN, PLATFORMS, DOMAIN
 from .coordinator import TerraMasterDataUpdateCoordinator
 from .share import TerraMasterShareView
 
-type TerraMasterConfigEntry = ConfigEntry[TerraMasterDataUpdateCoordinator]
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
+type TerraMasterConfigEntry = ConfigEntry[TerraMasterDataUpdateCoordinator]
 
 async def async_setup(
     hass: HomeAssistant,
