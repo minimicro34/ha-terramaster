@@ -1,14 +1,22 @@
 {
   "domain": "terramaster",
   "name": "TerraMaster TOS",
-  "codeowners": ["@minimicro34"],
+  "codeowners": [
+    "@minimicro34"
+  ],
   "config_flow": true,
-  "dependencies": ["http"],
+  "dependencies": [
+    "http"
+  ],
   "documentation": "https://github.com/minimicro34/ha-terramaster",
   "integration_type": "device",
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/minimicro34/ha-terramaster/issues",
-  "loggers": ["asyncssh"],
-  "requirements": ["asyncssh==2.24.0"],
+  "loggers": [
+    "asyncssh"
+  ],
+  "requirements": [
+    "asyncssh==2.24.0"
+  ],
   "version": "1.0.0"
 }
