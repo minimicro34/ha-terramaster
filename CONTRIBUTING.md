@@ -37,6 +37,17 @@ GitHub Actions also runs:
 - Home Assistant Hassfest
 - HACS validation
 
+## Translations
+
+When adding or changing user-facing strings:
+
+- update `custom_components/terramaster/strings.json`;
+- update the corresponding files in `custom_components/terramaster/translations/`;
+- keep translation keys synchronized between languages;
+- do not remove existing translation keys without checking their usage.
+
+Run the validation checks before committing translation changes.
+
 ## Pull requests
 
 Please:
