@@ -2,9 +2,10 @@
 
 Local monitoring of TerraMaster NAS devices from Home Assistant over SSH.
 
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://www.hacs.xyz/)
 [![Release](https://img.shields.io/github/v/release/minimicro34/ha-terramaster)](https://github.com/minimicro34/ha-terramaster/releases)
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://www.hacs.xyz/)
 [![Validate](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml/badge.svg)](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%E2%98%95-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/minimicro34)
 [![License](https://img.shields.io/github/license/minimicro34/ha-terramaster)](LICENSE)
 
 ## Features
@@ -147,6 +148,57 @@ ruff check .
 ### 1.0.0
 
 First stable release with system, SMART, RAID, volume, network, services and shared-folder monitoring.
+
+## Contributing
+
+Contributions are welcome.
+
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes.
+
+For significant changes, please open an issue before submitting a pull request.
+
+## Support
+
+If you find TerraMaster TOS for Home Assistant useful and would like to support
+its development, you can buy me a coffee.
+
+<p align="center">
+  <a href="https://buymeacoffee.com/minimicro34">
+    <img
+      src="https://github.com/appcraftstudio/buymeacoffee/raw/master/Images/snapshot-bmc-button.png"
+      alt="Buy Me a Coffee"
+      width="300"
+    />
+  </a>
+</p>
+
+Your support helps dedicate more time to improving the integration, adding new
+features, testing additional TerraMaster TOS configurations and fixing issues.
+
+Bug reports, feature suggestions, contributions and GitHub stars are also
+greatly appreciated.
+
+Please use GitHub Issues for bug reports and feature requests.
+
+When reporting an issue, please include whenever possible:
+
+- TerraMaster NAS model;
+- TOS version;
+- TerraMaster integration version;
+- Home Assistant version;
+- a clear description of the problem;
+- relevant Home Assistant logs;
+- Home Assistant diagnostics.
+
+For SSH or data-collection problems, please also include:
+
+- the authentication method used (password or SSH key);
+- whether the SSH connection works outside Home Assistant;
+- which sensor or data category is affected;
+- relevant command errors, with sensitive information redacted.
+
+Never include passwords, SSH private keys, authentication credentials or other
+sensitive NAS information.
 
 ## License
 
