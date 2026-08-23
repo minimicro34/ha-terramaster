@@ -4,6 +4,7 @@ Local monitoring of TerraMaster NAS devices from Home Assistant over SSH.
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://www.hacs.xyz/)
 [![Release](https://img.shields.io/github/v/release/minimicro34/ha-terramaster)](https://github.com/minimicro34/ha-terramaster/releases)
+[![Validate](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml/badge.svg)](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml)
 [![License](https://img.shields.io/github/license/minimicro34/ha-terramaster)](LICENSE)
 
 ## Features
@@ -149,4 +150,6 @@ First stable release with system, SMART, RAID, volume, network, services and sha
 
 ## License
 
-See [LICENSE](LICENSE).
+Copyright (c) 2026 minimicro34
+
+This project is licensed under the [GNU General Public License v3.0 or later](LICENSE).
