@@ -694,7 +694,7 @@ class TerraMasterApiClient:
     def _parse_raids(
         lines: list[str], details: dict[str, list[str]], lsblk: list[dict[str, str]]
     ) -> tuple[TerraMasterRaid, ...]:
-        sizes = {row.get("NAME"): as_int(row.get("SIZE")) for row in lsblk}
+        block_rows = {row.get("NAME"): row for row in lsblk if row.get("NAME")}
         raids: list[TerraMasterRaid] = []
         for index, line in enumerate(lines):
             header = MD_HEADER.match(line)
@@ -708,7 +708,21 @@ class TerraMasterApiClient:
             active = int(status.group(2)) if status else None
             detail = details.get(name, [level, None, None, None, None])
             degraded = as_int(detail[2])
-            is_system = name in {"md8", "md9"}
+            block = block_rows.get(name, {})
+            filesystem = block.get("FSTYPE") or None
+            mountpoint = block.get("MOUNTPOINT") or None
+            size = as_int(block.get("SIZE"))
+            is_system = (
+                name in {"md8", "md9"}
+                or filesystem == "swap"
+                or mountpoint == "/"
+            )
+            system_type: str | None = None
+            if is_system:
+                if filesystem == "swap" or name == "md8":
+                    system_type = "system_swap"
+                elif mountpoint == "/" or name == "md9":
+                    system_type = "tos_system"
             if is_system and active:
                 degraded = 0
             raids.append(
@@ -716,7 +730,7 @@ class TerraMasterApiClient:
                     name=name,
                     level=detail[0] or level,
                     state=detail[1],
-                    size=sizes.get(name),
+                    size=size,
                     members=tuple(MD_MEMBER.findall(member_text)),
                     expected_devices=expected,
                     active_devices=active,
@@ -724,6 +738,9 @@ class TerraMasterApiClient:
                     sync_action=detail[3],
                     sync_progress=sync_progress(detail[4]),
                     is_system=is_system,
+                    filesystem=filesystem,
+                    mountpoint=mountpoint,
+                    system_type=system_type,
                 )
             )
         return tuple(raids)
