@@ -206,7 +206,9 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         assert migrated_uptime.options["sensor.private"] == {
             "suggested_unit_of_measurement": UnitOfTime.DAYS
         }
-        migrated_memory_total = registry.async_get(memory_total_registry_entry.entity_id)
+        migrated_memory_total = registry.async_get(
+            memory_total_registry_entry.entity_id
+        )
         assert migrated_memory_total is not None
         assert migrated_memory_total.entity_category is None
         migrated_received = registry.async_get(received_registry_entry.entity_id)
