@@ -55,6 +55,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
                 size=125829120,
                 state="running",
                 is_system=True,
+                smart_status="ok",
             ),
             TerraMasterDisk(
                 name="sdb",
@@ -78,6 +79,39 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
                 expected_devices=2,
                 active_devices=2,
                 degraded_devices=0,
+                sync_action="idle",
+                sync_progress=None,
+            ),
+            TerraMasterRaid(
+                name="md8",
+                level="raid1",
+                state="clean",
+                size=2_050_000_000,
+                members=("sdb3", "sdc3"),
+                expected_devices=24,
+                active_devices=2,
+                degraded_devices=0,
+                sync_action="idle",
+                sync_progress=None,
+                is_system=True,
+                filesystem="swap",
+                system_type="system_swap",
+            ),
+            TerraMasterRaid(
+                name="md9",
+                level="raid1",
+                state="clean",
+                size=3_070_000_000,
+                members=("sdb2", "sdc2"),
+                expected_devices=24,
+                active_devices=2,
+                degraded_devices=0,
+                sync_action="idle",
+                sync_progress=None,
+                is_system=True,
+                filesystem="ext4",
+                mountpoint="/",
+                system_type="tos_system",
             ),
         ),
         volumes=(
@@ -172,9 +206,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         assert migrated_uptime.options["sensor.private"] == {
             "suggested_unit_of_measurement": UnitOfTime.DAYS
         }
-        migrated_memory_total = registry.async_get(
-            memory_total_registry_entry.entity_id
-        )
+        migrated_memory_total = registry.async_get(memory_total_registry_entry.entity_id)
         assert migrated_memory_total is not None
         assert migrated_memory_total.entity_category is None
         migrated_received = registry.async_get(received_registry_entry.entity_id)
@@ -197,8 +229,51 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         assert "System disk sda" in device_names
         assert "DISK sdb" in device_names
         assert "RAID md0" in device_names
+        assert "System RAID md8" in device_names
+        assert "System RAID md9" in device_names
         assert "VOLUME vg0-lv0" in device_names
         assert not any(name.startswith("SHARE") for name in device_names)
+
+        unique_ids = {
+            entity.unique_id for entity in entities if entity.unique_id is not None
+        }
+        sda_ids = {uid for uid in unique_ids if "_disk_sda_" in uid}
+        assert sda_ids == {
+            "nas.local:9222_disk_sda_role",
+            "nas.local:9222_disk_sda_model",
+            "nas.local:9222_disk_sda_size",
+            "nas.local:9222_disk_sda_state",
+            "nas.local:9222_disk_sda_smart_status",
+        }
+        assert "nas.local:9222_raid_md0_system_type" not in unique_ids
+        assert "nas.local:9222_raid_md8_system_type" in unique_ids
+        assert "nas.local:9222_raid_md9_system_type" in unique_ids
+
+        md0_members = next(
+            entity
+            for entity in entities
+            if entity.unique_id == "nas.local:9222_raid_md0_members"
+        )
+        assert md0_members.native_value == "sdb4, sdc4"
+        md0_progress = next(
+            entity
+            for entity in entities
+            if entity.unique_id == "nas.local:9222_raid_md0_sync_progress"
+        )
+        assert md0_progress.native_value == "none"
+        md8_type = next(
+            entity
+            for entity in entities
+            if entity.unique_id == "nas.local:9222_raid_md8_system_type"
+        )
+        assert md8_type.native_value == "system_swap"
+        md9_type = next(
+            entity
+            for entity in entities
+            if entity.unique_id == "nas.local:9222_raid_md9_system_type"
+        )
+        assert md9_type.native_value == "tos_system"
+
         assert (
             sum(
                 entity.unique_id.endswith(("cpu0_usage", "cpu1_usage"))
@@ -227,8 +302,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         share_entity = next(
             entity
             for entity in entities
-            if entity.unique_id is not None
-            and entity.unique_id.endswith("share_public")
+            if entity.unique_id is not None and entity.unique_id.endswith("share_public")
         )
         assert share_entity.device_info["name"] == "NAS-NICO"
         assert share_entity.device_info["configuration_url"] == (
