@@ -324,7 +324,15 @@ async def async_setup_entry(
             ("network", entry.runtime_data.data.networks, NETWORK_SENSORS),
         ):
             for storage_object in objects:
-                for description in descriptions:
+                object_descriptions = descriptions
+                if kind == "disk" and storage_object.is_system:
+                    object_descriptions = tuple(
+                        description
+                        for description in descriptions
+                        if description.key
+                        in {"role", "model", "size", "state", "smart_status"}
+                    )
+                for description in object_descriptions:
                     key = (
                         kind,
                         storage_object.name,
@@ -536,11 +544,7 @@ class TerraMasterCpuCoreSensor(
         """Return whether the core utilization sample is available."""
         core = self._core()
 
-        return (
-            super().available
-            and core is not None
-            and core.usage is not None
-        )
+        return super().available and core is not None and core.usage is not None
 
     @property
     def native_value(self) -> float | None:
@@ -605,11 +609,7 @@ class TerraMasterServiceSensor(
         """Return whether service detection was available."""
         service = self._service()
 
-        return (
-            super().available
-            and service is not None
-            and service.enabled is not None
-        )
+        return super().available and service is not None and service.enabled is not None
 
     @property
     def native_value(self) -> str | None:
@@ -751,18 +751,9 @@ class TerraMasterShareSensor(
             self._username,
         )
 
-        attributes.update(
-            {
-                f"{protocol}_url": url
-                for protocol, url in urls.items()
-            }
-        )
+        attributes.update({f"{protocol}_url": url for protocol, url in urls.items()})
 
-        if (
-            urls
-            and isinstance(self._share_token, str)
-            and self._share_token
-        ):
+        if urls and isinstance(self._share_token, str) and self._share_token:
             base_url = _get_home_assistant_url(self._home_assistant)
 
             if base_url is not None:
@@ -938,11 +929,18 @@ RAID_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
         value_fn=lambda raid: raid.sync_action,
     ),
     TerraMasterStorageSensorDescription(
+        key="members",
+        translation_key="raid_members",
+        icon="mdi:harddisk-plus",
+        value_fn=lambda raid: ", ".join(raid.members),
+    ),
+    TerraMasterStorageSensorDescription(
         key="sync_progress",
         translation_key="sync_progress",
-        native_unit_of_measurement=PERCENTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda raid: raid.sync_progress,
+        icon="mdi:progress-clock",
+        value_fn=lambda raid: (
+            f"{raid.sync_progress:g} %" if raid.sync_progress is not None else "none"
+        ),
     ),
 )
 
