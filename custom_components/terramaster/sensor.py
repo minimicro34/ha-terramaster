@@ -1093,7 +1093,6 @@ class TerraMasterStorageSensor(
             name=device_name,
             manufacturer="TerraMaster",
             model=f"{'System ' if is_system else ''}{kind.capitalize()}",
-            via_device=(DOMAIN, nas_id),
         )
 
     def _object(
