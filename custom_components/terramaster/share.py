@@ -280,7 +280,9 @@ class TerraMasterShareView(HomeAssistantView):
                 "</section>"
             )
 
-        safe_title = escape(shares[0].name) if share_name is not None else all_shares_title
+        safe_title = (
+            escape(shares[0].name) if share_name is not None else all_shares_title
+        )
         list_url = share_page_url("", entry.entry_id, provided_token)
         if share_name is not None:
             navigation = (
@@ -289,7 +291,9 @@ class TerraMasterShareView(HomeAssistantView):
                 '<a href="/">Home Assistant ↗</a>'
             )
         else:
-            home_label = "Retour à Home Assistant" if is_french else "Back to Home Assistant"
+            home_label = (
+                "Retour à Home Assistant" if is_french else "Back to Home Assistant"
+            )
             navigation = f'<a href="/">{escape(home_label)}</a>'
 
         page_sections = "\n".join(sections)
