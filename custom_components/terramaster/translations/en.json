@@ -34,138 +34,54 @@
   },
   "entity": {
     "sensor": {
-      "model": {
-        "name": "Model"
-      },
-      "platform": {
-        "name": "SoC / hardware platform"
-      },
-      "tos_version": {
-        "name": "TOS version"
-      },
-      "linux_distribution": {
-        "name": "Linux distribution"
-      },
-      "kernel_version": {
-        "name": "Linux kernel version"
-      },
-      "uptime": {
-        "name": "Uptime"
-      },
-      "last_restart": {
-        "name": "Last restart"
-      },
-      "cpu_model": {
-        "name": "Processor model"
-      },
-      "cpu_usage": {
-        "name": "CPU usage"
-      },
-      "cpu_core_usage": {
-        "name": "CPU core {core}"
-      },
-      "memory_total": {
-        "name": "Total memory"
-      },
-      "memory_available": {
-        "name": "Available memory"
-      },
-      "memory_usage": {
-        "name": "Memory usage"
-      },
-      "temperature": {
-        "name": "Temperature"
-      },
-      "disk_usage": {
-        "name": "Disk usage"
-      },
-      "disk_model": {
-        "name": "Model"
-      },
-      "capacity": {
-        "name": "Capacity"
-      },
-      "state": {
-        "name": "State"
-      },
-      "smart_status": {
-        "name": "SMART status"
-      },
-      "power_on_time": {
-        "name": "Power-on time"
-      },
-      "power_cycles": {
-        "name": "Power cycles"
-      },
-      "start_stop_cycles": {
-        "name": "Start/stop cycles"
-      },
-      "load_cycles": {
-        "name": "Load cycles"
-      },
-      "spin_retries": {
-        "name": "Spin retries"
-      },
-      "reallocated_sectors": {
-        "name": "Reallocated sectors"
-      },
-      "reallocated_events": {
-        "name": "Reallocation events"
-      },
-      "pending_sectors": {
-        "name": "Pending sectors"
-      },
-      "offline_uncorrectable": {
-        "name": "Offline uncorrectable sectors"
-      },
-      "udma_crc_errors": {
-        "name": "UDMA CRC errors"
-      },
-      "raid_level": {
-        "name": "RAID level"
-      },
-      "degraded_devices": {
-        "name": "Degraded devices"
-      },
-      "sync_action": {
-        "name": "Synchronization action"
-      },
+      "model": {"name": "Model"},
+      "platform": {"name": "SoC / hardware platform"},
+      "tos_version": {"name": "TOS version"},
+      "linux_distribution": {"name": "Linux distribution"},
+      "kernel_version": {"name": "Linux kernel version"},
+      "uptime": {"name": "Uptime"},
+      "last_restart": {"name": "Last restart"},
+      "cpu_model": {"name": "Processor model"},
+      "cpu_usage": {"name": "CPU usage"},
+      "cpu_core_usage": {"name": "CPU core {core}"},
+      "memory_total": {"name": "Total memory"},
+      "memory_available": {"name": "Available memory"},
+      "memory_usage": {"name": "Memory usage"},
+      "temperature": {"name": "Temperature"},
+      "disk_usage": {"name": "Disk usage"},
+      "disk_model": {"name": "Model"},
+      "capacity": {"name": "Capacity"},
+      "state": {"name": "State"},
+      "smart_status": {"name": "SMART status"},
+      "power_on_time": {"name": "Power-on time"},
+      "power_cycles": {"name": "Power cycles"},
+      "start_stop_cycles": {"name": "Start/stop cycles"},
+      "load_cycles": {"name": "Load cycles"},
+      "spin_retries": {"name": "Spin retries"},
+      "reallocated_sectors": {"name": "Reallocated sectors"},
+      "reallocated_events": {"name": "Reallocation events"},
+      "pending_sectors": {"name": "Pending sectors"},
+      "offline_uncorrectable": {"name": "Offline uncorrectable sectors"},
+      "udma_crc_errors": {"name": "UDMA CRC errors"},
+      "raid_level": {"name": "RAID level"},
+      "degraded_devices": {"name": "Degraded devices"},
+      "sync_action": {"name": "Synchronization action"},
+      "raid_members": {"name": "Members"},
       "sync_progress": {
-        "name": "Synchronization progress"
+        "name": "Synchronization progress",
+        "state": {"none": "None"}
       },
-      "filesystem": {
-        "name": "Filesystem"
-      },
-      "mountpoint": {
-        "name": "Mount point"
-      },
-      "used_space": {
-        "name": "Used space"
-      },
-      "available_space": {
-        "name": "Available space"
-      },
-      "storage_role": {
-        "name": "Storage role"
-      },
-      "link_state": {
-        "name": "Link state"
-      },
-      "link_speed": {
-        "name": "Link speed"
-      },
-      "received_data": {
-        "name": "Received data"
-      },
-      "sent_data": {
-        "name": "Sent data"
-      },
-      "receive_rate": {
-        "name": "Receive rate"
-      },
-      "transmit_rate": {
-        "name": "Transmit rate"
-      },
+      "filesystem": {"name": "Filesystem"},
+      "mountpoint": {"name": "Mount point"},
+      "used_space": {"name": "Used space"},
+      "available_space": {"name": "Available space"},
+      "storage_role": {"name": "Storage role"},
+      "link_state": {"name": "Link state"},
+      "link_speed": {"name": "Link speed"},
+      "received_data": {"name": "Received data"},
+      "sent_data": {"name": "Sent data"},
+      "receive_rate": {"name": "Receive rate"},
+      "transmit_rate": {"name": "Transmit rate"},
       "service_status": {
         "name": "{service} service",
         "state": {
@@ -173,12 +89,8 @@
           "disabled": "Disabled"
         }
       },
-      "shared_folder": {
-        "name": "Shared folder {share}"
-      },
-      "shared_folders_page": {
-        "name": "Shared folders"
-      }
+      "shared_folder": {"name": "Shared folder {share}"},
+      "shared_folders_page": {"name": "Shared folders"}
     }
   }
 }
