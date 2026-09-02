@@ -211,8 +211,12 @@ if command -v smartctl >/dev/null 2>&1; then
         [ -d "$disk_path" ] || continue
         disk_name=${disk_path##*/}
         smart_output=$(smartctl -H -A -d sat "/dev/$disk_name" 2>&1)
+        if ! printf '%s\n' "$smart_output" | grep -q \
+            -e 'SMART overall-health' -e 'SMART Health Status:'; then
+            smart_output=$(smartctl -H -A -T permissive -d scsi "/dev/$disk_name" 2>&1)
+        fi
         if printf '%s\n' "$smart_output" | grep -q \
-            -e 'START OF READ SMART DATA' -e 'SMART overall-health'; then
+            -e 'SMART overall-health' -e 'SMART Health Status:'; then
             printf '%s\n' "$smart_output" | while IFS= read -r smart_line; do
                 [ -n "$smart_line" ] && printf 'smart=%s|%s\n' \
                     "$disk_name" "$smart_line"
@@ -642,7 +646,6 @@ class TerraMasterApiClient:
             for name in ("ssh", "telnet", "snmp")
         )
 
-
     @staticmethod
     def _parse_physical_disks(
         rows: dict[str, list[str]], smart: dict[str, list[str]]
@@ -657,7 +660,8 @@ class TerraMasterApiClient:
             attributes: dict[int, int] = {}
             health: str | None = None
             for line in smart.get(name, []):
-                if "test result:" in line:
+                lower = line.lower()
+                if "test result:" in lower or "smart health status:" in lower:
                     health = line.rsplit(":", 1)[-1].strip().lower()
                 match = SMART_ATTRIBUTE.match(line)
                 if match:
