@@ -1088,21 +1088,13 @@ class TerraMasterStorageSensor(
 
         self._attr_unique_id = f"{object_id}_{description.key}"
 
-        self._attr_device_info = {
-            "identifiers": {
-                (DOMAIN, object_id),
-            },
-            "name": device_name,
-            "manufacturer": "TerraMaster",
-            "model": (
-                f"{'System ' if is_system else ''}"
-                f"{kind.capitalize()}"
-            ),
-            "via_device": (
-                DOMAIN,
-                nas_id,
-            ),
-        }
+        self._attr_device_info = DeviceInfo(
+            identifiers={(DOMAIN, object_id)},
+            name=device_name,
+            manufacturer="TerraMaster",
+            model=f"{'System ' if is_system else ''}{kind.capitalize()}",
+            via_device=(DOMAIN, nas_id),
+        )
 
     def _object(
         self,
