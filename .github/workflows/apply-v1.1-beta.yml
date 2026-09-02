@@ -1,0 +1,207 @@
+name: Apply v1.1 beta storage improvements
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply beta changes
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          p = Path('custom_components/terramaster/api/client.py')
+          s = p.read_text()
+          old = '''        smart_output=$(smartctl -H -A -d sat "/dev/$disk_name" 2>&1)
+          if printf '%s\\n' "$smart_output" | grep -q \\
+              -e 'START OF READ SMART DATA' -e 'SMART overall-health'; then
+          '''
+          new = '''        smart_output=$(smartctl -H -A -d sat "/dev/$disk_name" 2>&1)
+          if ! printf '%s\\n' "$smart_output" | grep -q \\
+              -e 'SMART overall-health' -e 'SMART Health Status:'; then
+              smart_output=$(smartctl -H -A -T permissive -d scsi "/dev/$disk_name" 2>&1)
+          fi
+          if printf '%s\\n' "$smart_output" | grep -q \\
+              -e 'SMART overall-health' -e 'SMART Health Status:'; then
+          '''
+          if old not in s:
+              raise SystemExit('SMART command block not found')
+          s = s.replace(old, new, 1)
+          old = '''            for line in smart.get(name, []):
+                  if "test result:" in line:
+                      health = line.rsplit(":", 1)[-1].strip().lower()
+                  match = SMART_ATTRIBUTE.match(line)
+          '''
+          new = '''            for line in smart.get(name, []):
+                  lower = line.lower()
+                  if "test result:" in lower or "smart health status:" in lower:
+                      health = line.rsplit(":", 1)[-1].strip().lower()
+                  match = SMART_ATTRIBUTE.match(line)
+          '''
+          if old not in s:
+              raise SystemExit('SMART parser block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          p = Path('custom_components/terramaster/sensor.py')
+          s = p.read_text()
+          old = '''            for storage_object in objects:
+                  for description in descriptions:
+                      key = (
+          '''
+          new = '''            for storage_object in objects:
+                  object_descriptions = descriptions
+                  if kind == "disk" and storage_object.is_system:
+                      object_descriptions = tuple(
+                          description
+                          for description in descriptions
+                          if description.key in {"role", "model", "size", "state", "smart_status"}
+                      )
+                  for description in object_descriptions:
+                      key = (
+          '''
+          if old not in s:
+              raise SystemExit('sensor discovery block not found')
+          s = s.replace(old, new, 1)
+          old = '''    TerraMasterStorageSensorDescription(
+              key="sync_progress",
+              translation_key="sync_progress",
+              native_unit_of_measurement=PERCENTAGE,
+              state_class=SensorStateClass.MEASUREMENT,
+              value_fn=lambda raid: raid.sync_progress,
+          ),
+          '''
+          new = '''    TerraMasterStorageSensorDescription(
+              key="members",
+              translation_key="raid_members",
+              icon="mdi:harddisk-plus",
+              value_fn=lambda raid: ", ".join(raid.members),
+          ),
+          TerraMasterStorageSensorDescription(
+              key="sync_progress",
+              translation_key="sync_progress",
+              icon="mdi:progress-clock",
+              value_fn=lambda raid: (
+                  f"{raid.sync_progress:g} %" if raid.sync_progress is not None else "none"
+              ),
+          ),
+          '''
+          if old not in s:
+              raise SystemExit('RAID sync progress block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+
+          for path in ('custom_components/terramaster/strings.json', 'custom_components/terramaster/translations/en.json'):
+              p = Path(path)
+              s = p.read_text()
+              marker = '"sync_progress": {'
+              if '"raid_members": {' not in s:
+                  idx = s.find(marker)
+                  if idx < 0:
+                      raise SystemExit(f'sync_progress translation not found in {path}')
+                  s = s[:idx] + '"raid_members": {"name": "Members"},\n      ' + s[idx:]
+              p.write_text(s)
+
+          p = Path('custom_components/terramaster/translations/fr.json')
+          s = p.read_text()
+          marker = '"sync_progress": {'
+          if '"raid_members": {' not in s:
+              idx = s.find(marker)
+              if idx < 0:
+                  raise SystemExit('sync_progress translation not found in fr.json')
+              s = s[:idx] + '"raid_members": {"name": "Membres"},\n      ' + s[idx:]
+          p.write_text(s)
+
+          p = Path('custom_components/terramaster/share.py')
+          s = p.read_text()
+          old = '''        safe_title = (
+              escape(shares[0].name)
+              if share_name is not None
+              else all_shares_title
+          )
+
+          page_sections = "\\n".join(sections)
+          '''
+          new = '''        safe_title = (
+              escape(shares[0].name)
+              if share_name is not None
+              else all_shares_title
+          )
+
+          list_url = share_page_url(
+              "",
+              entry.entry_id,
+              provided_token,
+          )
+          navigation = (
+              f'<a href="{escape(list_url, quote=True)}">← {escape(all_shares_title)}</a>'
+              f'<a href="/">Home Assistant ↗</a>'
+              if share_name is not None
+              else '<a href="/">Home Assistant ↗</a>'
+          )
+
+          page_sections = "\\n".join(sections)
+          '''
+          if old not in s:
+              raise SystemExit('share title block not found')
+          s = s.replace(old, new, 1)
+          old = '''    header {{
+              margin-bottom: 1.5rem;
+          }}
+          '''
+          new = '''    header {{
+              margin-bottom: 1.5rem;
+          }}
+
+          nav {{
+              display: flex;
+              flex-wrap: wrap;
+              gap: 1rem;
+              justify-content: space-between;
+              margin-bottom: 1.25rem;
+          }}
+
+          nav a {{
+              color: #03a9f4;
+              font-weight: 650;
+              text-decoration: none;
+          }}
+          '''
+          if old not in s:
+              raise SystemExit('share CSS header block not found')
+          s = s.replace(old, new, 1)
+          old = '''<body>
+            <header>
+          '''
+          new = '''<body>
+            <nav>{navigation}</nav>
+            <header>
+          '''
+          if old not in s:
+              raise SystemExit('share body block not found')
+          s = s.replace(old, new, 1)
+          p.write_text(s)
+          PY
+      - name: Format and test
+        run: |
+          python -m pip install -r requirements_test.txt
+          python -m ruff format custom_components tests
+          python -m ruff check custom_components tests
+          python -m mypy custom_components/terramaster
+          python -m pytest -q
+      - name: Commit
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components tests
+          git diff --cached --quiet || git commit -m "Add v1.1 beta storage and share improvements"
+          git push
