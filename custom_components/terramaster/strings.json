@@ -71,6 +71,13 @@
         "name": "Synchronization progress",
         "state": {"none": "None"}
       },
+      "raid_system_type": {
+        "name": "Type",
+        "state": {
+          "system_swap": "System swap",
+          "tos_system": "TOS system"
+        }
+      },
       "filesystem": {"name": "Filesystem"},
       "mountpoint": {"name": "Mount point"},
       "used_space": {"name": "Used space"},
