@@ -12,14 +12,16 @@ Local monitoring of TerraMaster NAS devices from Home Assistant over SSH.
 
 - NAS model, TOS version, Linux distribution and kernel
 - Uptime, last restart, CPU, CPU cores, memory and temperature
-- Physical disks and SMART health information
-- RAID arrays, degradation and synchronization progress
+- Physical disks and SMART health information, including system-disk fallback where supported
+- RAID arrays, members, degradation, purpose and synchronization status/progress
 - Volumes, capacity and usage
 - Network interfaces, counters and real-time throughput
 - SSH, Telnet and SNMP service detection
 - Shared-folder discovery from the TOS database
 - SMB, NFS and AFP protocol detection
 - Secure HTML pages for all shares or one selected share
+- Direct access to the shares page from the main NAS device in Home Assistant
+- Navigation between the NAS device, shares index and individual share pages
 - English and French translations
 
 The integration polls locally and does not require a cloud account.
@@ -75,9 +77,9 @@ The SSH host key is recorded during the first connection and checked on later co
 
 ## Shared folders
 
-The main **Shared folders** sensor displays the number of detected shares.
+The main NAS device provides a **Visit** link that opens the secure TerraMaster shares page directly.
 
-Its attributes contain:
+The main **Shared folders** sensor displays the number of detected shares. Its attributes contain:
 
 - the share names;
 - all detected protocols;
@@ -92,7 +94,28 @@ Each individual shared-folder diagnostic entity keeps the detailed information:
 - SMB, NFS and AFP URLs;
 - `open_share`, a secure link to the HTML page for that share.
 
+The shares index and individual share pages provide navigation back to the main NAS device. Individual share pages also provide a direct link back to the shares index.
+
 Passwords are never included in connection URLs. SMB and AFP URLs can include the configured username so the operating system can request or reuse the password.
+
+## Storage and SMART
+
+Physical disks expose the storage and SMART information supported by the device.
+
+Normal ATA disks use SAT SMART collection first. Devices that do not expose usable SMART health through SAT can fall back to permissive SCSI health collection. This is used, for example, for the TerraMaster USB system disk when supported by `smartctl`.
+
+System disks intentionally expose only relevant storage information and SMART health; unsupported ATA counters and invalid values such as a reported `0 °C` temperature are not exposed.
+
+## RAID arrays
+
+RAID devices expose their level, capacity, state, members and degraded-disk count.
+
+Synchronization is represented by two separate entities:
+
+- **Synchronization action** reports states such as `idle`, `resync` or `recover`.
+- **Synchronization progress** reports the percentage while an operation is active and `None` / `Aucune` while idle.
+
+TerraMaster system RAID arrays are identified as TOS system or system swap where this can be determined from filesystem and mount information. TerraMaster's system-array metadata may contain 24 logical RAID slots even when only the installed physical members are expected; this metadata is normalized so it does not produce a misleading degraded-disk count in the primary Home Assistant UI.
 
 ## Devices and entities
 
@@ -123,6 +146,8 @@ sudo sqlite3 -separator '|' /etc/base/nasdb   'SELECT foldername,mntpath,device,
 
 Verify that `smartctl` is installed on the NAS and that the configured account can execute it through `sudo`.
 
+SMART support depends on the disk and bridge presented by the NAS. The integration prefers SAT for normal ATA disks and only uses the permissive SCSI fallback when SAT does not provide a usable SMART health result.
+
 ### Authentication or host-key error
 
 Remove and re-add the integration only after confirming that the NAS address and SSH host key change are expected.
@@ -145,9 +170,15 @@ ruff check .
 
 ## Release history
 
+### 1.1.0
+
+Improved SMART handling for TerraMaster system disks, expanded RAID information and system-array handling, and improved shared-folder navigation with direct access from the main NAS device.
+
 ### 1.0.0
 
 First stable release with system, SMART, RAID, volume, network, services and shared-folder monitoring.
+
+See [CHANGELOG.md](CHANGELOG.md) for the complete release history, including beta releases.
 
 ## Contributing
 
