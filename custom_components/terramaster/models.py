@@ -44,6 +44,9 @@ class TerraMasterRaid:
     sync_action: str | None = None
     sync_progress: float | None = None
     is_system: bool = False
+    filesystem: str | None = None
+    mountpoint: str | None = None
+    system_type: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
