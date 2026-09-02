@@ -6,14 +6,22 @@ The format is based on Keep a Changelog.
 
 ---
 
+## [1.1.0-beta2] - 2026-09-02
+
+### Added
+- Added direct access to the TerraMaster shares page from the main NAS device.
+- Added navigation between individual share pages, the TerraMaster shares index, and the NAS device page in Home Assistant.
+
+### Changed
+- Share pages now provide a direct “Back to NAS” / “Retour au NAS” link instead of returning to the Home Assistant root page.
+
 ## [1.1.0-beta1] - 2026-09-02
 
 ### Added
 - Added SMART health fallback for devices requiring permissive SCSI access.
 - Added RAID member information.
 - Added system RAID purpose information for TOS and swap arrays.
-- Added direct access to the TerraMaster shares page from the main NAS device.
-- Added navigation between individual share pages, the TerraMaster shares index, and the NAS device page in Home Assistant.
+- Added navigation between individual share pages, the TerraMaster shares index, and Home Assistant.
 - Added automated tests covering SMART fallback, system disks, RAID details, synchronization display, and share navigation.
 
 ### Changed
@@ -28,4 +36,5 @@ The format is based on Keep a Changelog.
 - SMART health can be reported for the TerraMaster USB system disk without exposing bogus 0 °C temperature or unsupported ATA counters.
 - TerraMaster system RAID metadata with 24 logical slots no longer implies 24 expected physical disks/degraded hardware in the primary UI.
 
+[1.1.0-beta2]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.0-beta1...v1.1.0-beta2
 [1.1.0-beta1]: https://github.com/minimicro34/ha-terramaster/compare/v1.0.0...v1.1.0-beta1
