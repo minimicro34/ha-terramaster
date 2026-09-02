@@ -103,10 +103,10 @@ def test_resolve_share_storage() -> None:
     assert storage.raid.name == "md0"
 
 
-async def test_share_view() -> None:
-    """The token-protected landing page presents actions and storage details."""
+def _hass() -> Mock:
     hass = Mock()
     hass.config_entries.async_get_entry.return_value = SimpleNamespace(
+        entry_id="entry-1",
         domain=DOMAIN,
         data={
             CONF_HOST: "nas.local",
@@ -115,16 +115,18 @@ async def test_share_view() -> None:
         },
         runtime_data=SimpleNamespace(data=_storage_data()),
     )
+    return hass
+
+
+async def test_share_view() -> None:
+    """The landing page presents actions, storage details, and HA navigation."""
     request = make_mocked_request(
         "GET",
-        (
-            "/api/terramaster/share?"
-            "entry_id=entry-1&token=test-share-token"
-        ),
+        "/api/terramaster/share?entry_id=entry-1&token=test-share-token",
         headers={"Accept-Language": "fr-FR,fr;q=0.9"},
     )
 
-    response = await TerraMasterShareView(hass).get(request)
+    response = await TerraMasterShareView(_hass()).get(request)
 
     assert response.status == 200
     assert 'href="smb://admin@nas.local/My%20share"' in response.text
@@ -137,4 +139,28 @@ async def test_share_view() -> None:
     assert "md0 · RAID1" in response.text
     assert "820.00 GB" in response.text
     assert "admin" in response.text
+    assert '<a href="/">Retour à Home Assistant</a>' in response.text
     assert response.headers["X-Content-Type-Options"] == "nosniff"
+
+
+async def test_share_detail_navigation() -> None:
+    """A share detail page links back to the token-protected share index."""
+    request = make_mocked_request(
+        "GET",
+        (
+            "/api/terramaster/share?entry_id=entry-1&token=test-share-token"
+            "&share=My+share"
+        ),
+        headers={"Accept-Language": "fr-FR"},
+    )
+
+    response = await TerraMasterShareView(_hass()).get(request)
+
+    assert response.status == 200
+    assert "← Partages TerraMaster" in response.text
+    assert (
+        'href="/api/terramaster/share?entry_id=entry-1&amp;token=test-share-token"'
+        in response.text
+    )
+    assert "&amp;share=" not in response.text
+    assert '<a href="/">Home Assistant ↗</a>' in response.text
