@@ -26,6 +26,7 @@ disk=/dev/md0 1000 500 /mnt/bind
 disk=/dev/md1 2000 500 /Volume2
 physical_disk=sda|USB DISK 2.0||running|245760
 physical_disk=sdb|WDC WD10EFRX-68J||running|1953525168
+smart=sda|SMART Health Status: OK
 smart=sdb|SMART overall-health self-assessment test result: PASSED
 smart=sdb|  5 Reallocated_Sector_Ct   0x0033   200 200 140 Pre-fail Always - 2
 smart=sdb| 12 Power_Cycle_Count       0x0032   100 100 000 Old_age Always - 430
@@ -84,6 +85,10 @@ def test_parse_output() -> None:
     assert second.cpu_usage == 50.0
     assert [disk.name for disk in first.disks] == ["sda", "sdb"]
     assert first.disks[0].is_system is True
+    assert first.disks[0].smart_status == "ok"
+    assert first.disks[0].temperature is None
+    assert first.disks[0].power_on_hours is None
+    assert first.disks[0].reallocated_sectors is None
     assert first.disks[1].is_system is False
     assert first.disks[1].temperature == 39.0
     assert first.disks[1].reallocated_sectors == 2
@@ -108,6 +113,38 @@ def test_parse_output() -> None:
     assert first.services[1].enabled is True
     assert first.services[1].ports == (23,)
     assert first.services[2].ports == (161,)
+
+
+def test_parse_system_raids() -> None:
+    """TerraMaster system RAID metadata is normalized using block metadata."""
+    data = _client()._parse_output(  # noqa: SLF001
+        """\
+hostname=tnas
+mdstat=md8 : active raid1 sdb3[0] sdc3[1]
+mdstat=      2000000 blocks [24/2] [UU______________________]
+raid=md8|raid1|clean|22|idle|none
+lsblk=NAME="md8" SIZE="2050000000" FSTYPE="swap" MOUNTPOINT=""
+mdstat=md9 : active raid1 sdb2[0] sdc2[1]
+mdstat=      3000000 blocks [24/2] [UU______________________]
+raid=md9|raid1|clean|22|idle|none
+lsblk=NAME="md9" SIZE="3070000000" FSTYPE="ext4" MOUNTPOINT="/"
+"""
+    )
+
+    md8, md9 = data.raids
+    assert md8.is_system is True
+    assert md8.system_type == "system_swap"
+    assert md8.filesystem == "swap"
+    assert md8.degraded_devices == 0
+    assert md8.expected_devices == 24
+    assert md8.active_devices == 2
+    assert md8.members == ("sdb3", "sdc3")
+    assert md9.is_system is True
+    assert md9.system_type == "tos_system"
+    assert md9.filesystem == "ext4"
+    assert md9.mountpoint == "/"
+    assert md9.degraded_devices == 0
+    assert md9.members == ("sdb2", "sdc2")
 
 
 def test_parse_missing_values() -> None:
