@@ -11,7 +11,7 @@ jobs:
   fix:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - name: Apply via_device_id migration
         run: |
           python - <<'PY'
