@@ -304,7 +304,8 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         share_entity = next(
             entity
             for entity in entities
-            if entity.unique_id is not None and entity.unique_id.endswith("share_public")
+            if entity.unique_id is not None
+            and entity.unique_id.endswith("share_public")
         )
         assert share_entity.device_info["name"] == "NAS-NICO"
         assert share_entity.device_info["configuration_url"] == (
