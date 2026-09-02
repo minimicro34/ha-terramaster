@@ -1,0 +1,59 @@
+name: Fix storage DeviceInfo typing
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Apply DeviceInfo typing fix
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("custom_components/terramaster/sensor.py")
+          text = path.read_text()
+          old = '''        self._attr_device_info = {
+              "identifiers": {
+                  (DOMAIN, object_id),
+              },
+              "name": device_name,
+              "manufacturer": "TerraMaster",
+              "model": (
+                  f"{'System ' if is_system else ''}"
+                  f"{kind.capitalize()}"
+              ),
+              "via_device": (
+                  DOMAIN,
+                  nas_id,
+              ),
+          }
+'''
+          new = '''        self._attr_device_info = DeviceInfo(
+              identifiers={(DOMAIN, object_id)},
+              name=device_name,
+              manufacturer="TerraMaster",
+              model=f"{'System ' if is_system else ''}{kind.capitalize()}",
+              via_device=(DOMAIN, nas_id),
+          )
+'''
+          if old not in text:
+              raise SystemExit(0)
+          path.write_text(text.replace(old, new, 1))
+          PY
+      - name: Commit fix
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add custom_components/terramaster/sensor.py
+          git commit -m "Fix storage device info typing"
+          git push
