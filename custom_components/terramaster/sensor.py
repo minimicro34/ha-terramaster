@@ -501,7 +501,9 @@ class TerraMasterCpuCoreSensor(
         self._core_name = core_name
         nas_id = entry.unique_id or entry.entry_id
         core_number = core_name.removeprefix("cpu")
-        display_number = str(int(core_number) + 1) if core_number.isdigit() else core_name
+        display_number = (
+            str(int(core_number) + 1) if core_number.isdigit() else core_name
+        )
         self._attr_unique_id = f"{nas_id}_{core_name}_usage"
         self._attr_translation_placeholders = {"core": display_number}
         self._attr_device_info = _nas_device_info(coordinator, entry)
@@ -509,7 +511,11 @@ class TerraMasterCpuCoreSensor(
     def _core(self) -> TerraMasterCpuCore | None:
         """Return the matching CPU core."""
         return next(
-            (core for core in self.coordinator.data.cpu_cores if core.name == self._core_name),
+            (
+                core
+                for core in self.coordinator.data.cpu_cores
+                if core.name == self._core_name
+            ),
             None,
         )
 
@@ -630,7 +636,11 @@ class TerraMasterShareSensor(
     def _share(self) -> TerraMasterShare | None:
         """Return the matching shared folder."""
         return next(
-            (share for share in self.coordinator.data.shares if share.name == self._share_name),
+            (
+                share
+                for share in self.coordinator.data.shares
+                if share.name == self._share_name
+            ),
             None,
         )
 
@@ -667,7 +677,9 @@ class TerraMasterShareSensor(
                     "filesystem": storage.volume.filesystem,
                     "capacity_gb": round(storage.volume.size / 1_000_000_000, 2),
                     "used_gb": round(storage.volume.used / 1_000_000_000, 2),
-                    "available_gb": round(storage.volume.available / 1_000_000_000, 2),
+                    "available_gb": round(
+                        storage.volume.available / 1_000_000_000, 2
+                    ),
                     "usage_percent": round(storage.volume.usage, 1),
                 }
             )
@@ -730,7 +742,10 @@ DISK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
         value_fn=lambda disk: disk.size,
     ),
     TerraMasterStorageSensorDescription(
-        key="state", translation_key="state", icon="mdi:harddisk", value_fn=lambda disk: disk.state
+        key="state",
+        translation_key="state",
+        icon="mdi:harddisk",
+        value_fn=lambda disk: disk.state,
     ),
     TerraMasterStorageSensorDescription(
         key="smart_status",
@@ -814,10 +829,14 @@ RAID_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
         value_fn=lambda raid: "system" if raid.is_system else "user",
     ),
     TerraMasterStorageSensorDescription(
-        key="level", translation_key="raid_level", value_fn=lambda raid: raid.level
+        key="level",
+        translation_key="raid_level",
+        value_fn=lambda raid: raid.level,
     ),
     TerraMasterStorageSensorDescription(
-        key="state", translation_key="state", value_fn=lambda raid: raid.state
+        key="state",
+        translation_key="state",
+        value_fn=lambda raid: raid.state,
     ),
     TerraMasterStorageSensorDescription(
         key="size",
@@ -905,7 +924,10 @@ VOLUME_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
 
 NETWORK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
     TerraMasterStorageSensorDescription(
-        key="state", translation_key="link_state", icon="mdi:lan-connect", value_fn=lambda n: n.state
+        key="state",
+        translation_key="link_state",
+        icon="mdi:lan-connect",
+        value_fn=lambda network: network.state,
     ),
     TerraMasterStorageSensorDescription(
         key="speed",
@@ -949,7 +971,8 @@ NETWORK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
 
 
 class TerraMasterStorageSensor(
-    CoordinatorEntity[TerraMasterDataUpdateCoordinator], SensorEntity
+    CoordinatorEntity[TerraMasterDataUpdateCoordinator],
+    SensorEntity,
 ):
     """Sensor attached to a dynamically discovered storage device."""
 
