@@ -12,7 +12,8 @@ The format is based on Keep a Changelog.
 - Added SMART health fallback for devices requiring permissive SCSI access.
 - Added RAID member information.
 - Added system RAID purpose information for TOS and swap arrays.
-- Added navigation between individual share pages, the TerraMaster shares index, and Home Assistant.
+- Added direct access to the TerraMaster shares page from the main NAS device.
+- Added navigation between individual share pages, the TerraMaster shares index, and the NAS device page in Home Assistant.
 - Added automated tests covering SMART fallback, system disks, RAID details, synchronization display, and share navigation.
 
 ### Changed
