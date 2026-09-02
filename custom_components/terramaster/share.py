@@ -12,6 +12,7 @@ from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
 from homeassistant.const import CONF_HOST, CONF_USERNAME
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 
 from .const import CONF_SHARE_TOKEN, DOMAIN
 from .models import (
@@ -283,18 +284,23 @@ class TerraMasterShareView(HomeAssistantView):
         safe_title = (
             escape(shares[0].name) if share_name is not None else all_shares_title
         )
+        nas_id = entry.unique_id or entry.entry_id
+        device = dr.async_get(self._hass).async_get_device(
+            identifiers={(DOMAIN, nas_id)}
+        )
+        nas_url = f"/config/devices/device/{device.id}" if device is not None else "/"
+        nas_label = "Retour au NAS" if is_french else "Back to NAS"
         list_url = share_page_url("", entry.entry_id, provided_token)
         if share_name is not None:
             navigation = (
                 f'<a href="{escape(list_url, quote=True)}">← '
                 f"{escape(all_shares_title)}</a>"
-                '<a href="/">Home Assistant ↗</a>'
+                f'<a href="{escape(nas_url, quote=True)}">{escape(nas_label)}</a>'
             )
         else:
-            home_label = (
-                "Retour à Home Assistant" if is_french else "Back to Home Assistant"
+            navigation = (
+                f'<a href="{escape(nas_url, quote=True)}">{escape(nas_label)}</a>'
             )
-            navigation = f'<a href="/">{escape(home_label)}</a>'
 
         page_sections = "\n".join(sections)
         body = f"""<!doctype html>
