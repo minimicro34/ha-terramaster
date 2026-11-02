@@ -128,9 +128,15 @@ async def test_share_view() -> None:
         headers={"Accept-Language": "fr-FR,fr;q=0.9"},
     )
 
-    with patch(
-        "custom_components.terramaster.share.dr.async_get",
-        return_value=_device_registry(),
+    with (
+        patch(
+            "custom_components.terramaster.share.dr.async_get",
+            return_value=_device_registry(),
+        ),
+        patch(
+            "custom_components.terramaster.share.async_sign_path",
+            return_value="/signed-index",
+        ),
     ):
         response = await TerraMasterShareView(_hass()).get(request)
 
