@@ -6,6 +6,23 @@ The format is based on Keep a Changelog.
 
 ---
 
+## [1.1.2] - 2026-11-02
+
+Security hardening and authenticated share-page access.
+
+### Security
+- Require Home Assistant authentication for shared-folder HTML views instead of permanent query-string tokens.
+- Remove legacy shared-folder tokens from configuration entries and redact them from diagnostics.
+- Remove persistent share-page URLs from entity attributes and NAS device links.
+
+### Added
+- Add the `terramaster.get_share_link` Home Assistant action, returning signed share-page paths valid for five minutes.
+- Sign links back to the shared-folder index from individual share pages.
+
+### Changed
+- Document the new manual action workflow for securely accessing the share pages.
+- Retain SMB, NFS, and AFP connection URLs on share sensors.
+
 ## [1.1.0] - 2026-09-02
 
 Stable release of the changes tested in `1.1.0-beta1` and `1.1.0-beta2`.
@@ -83,6 +100,7 @@ First stable release.
 - Share links include the configured username where appropriate.
 - Improved Home Assistant device hierarchy and diagnostics.
 
+[1.1.2]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.1...v1.1.2
 [1.1.0]: https://github.com/minimicro34/ha-terramaster/compare/v1.0.0...v1.1.0
 [1.1.0-beta2]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.0-beta1...v1.1.0-beta2
 [1.1.0-beta1]: https://github.com/minimicro34/ha-terramaster/compare/v1.0.0...v1.1.0-beta1
