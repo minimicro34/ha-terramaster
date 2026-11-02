@@ -77,7 +77,7 @@ The SSH host key is recorded during the first connection and checked on later co
 
 ## Shared folders
 
-The shared-folder HTML view requires Home Assistant authentication. Direct browser navigation and the former **Visit** link are disabled until a safe short-lived link mechanism is available.
+The shared-folder HTML view requires Home Assistant authentication. Use the `terramaster.get_share_link` action in Home Assistant Developer Tools → Actions to generate a signed link valid for five minutes. The response contains a relative `url` (append it to your Home Assistant base URL) and `expires_in: 300`. If you have multiple NAS devices, supply `entry_id`; optionally supply `share` for one folder. The former permanent **Visit** link remains disabled to avoid exposing a reusable credential.
 
 The main **Shared folders** sensor displays the number of detected shares. Its attributes contain:
 
@@ -155,7 +155,7 @@ Remove and re-add the integration only after confirming that the NAS address and
 - Communication stays on the local network.
 - No cloud service is used.
 - The SSH server host key is pinned.
-- Shared-folder HTML views require Home Assistant authentication and do not use persistent URL tokens.
+- Shared-folder HTML views require Home Assistant authentication and use only short-lived signed links returned by an explicit action.
 - Legacy shared-folder tokens are removed from existing configuration entries at startup.
 - Passwords are not exposed in entity attributes or URLs.
 
