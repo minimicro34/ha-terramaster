@@ -164,16 +164,16 @@ async def test_share_detail_navigation() -> None:
         headers={"Accept-Language": "fr-FR"},
     )
 
-    with patch(
-        "custom_components.terramaster.share.dr.async_get",
-        return_value=_device_registry(),
+    with (
+        patch("custom_components.terramaster.share.dr.async_get", return_value=_device_registry()),
+        patch("custom_components.terramaster.share.async_sign_path", return_value="/signed-index"),
     ):
         response = await TerraMasterShareView(_hass()).get(request)
 
     assert response.status == 200
     assert "← Partages TerraMaster" in response.text
     assert (
-        'href="/api/terramaster/share?entry_id=entry-1"'
+        'href="/signed-index"'
         in response.text
     )
     assert "&amp;share=" not in response.text
