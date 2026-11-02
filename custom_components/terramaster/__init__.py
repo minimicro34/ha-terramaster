@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import secrets
-
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_PORT, CONF_USERNAME
 from homeassistant.core import HomeAssistant
@@ -34,16 +32,10 @@ async def async_setup_entry(
     entry: TerraMasterConfigEntry,
 ) -> bool:
     """Set up TerraMaster from a config entry."""
-    share_token = entry.data.get(CONF_SHARE_TOKEN)
-
-    if not isinstance(share_token, str) or not share_token:
-        hass.config_entries.async_update_entry(
-            entry,
-            data={
-                **entry.data,
-                CONF_SHARE_TOKEN: secrets.token_urlsafe(32),
-            },
-        )
+    if CONF_SHARE_TOKEN in entry.data:
+        updated_data = dict(entry.data)
+        updated_data.pop(CONF_SHARE_TOKEN)
+        hass.config_entries.async_update_entry(entry, data=updated_data)
 
     client = TerraMasterApiClient(
         host=entry.data[CONF_HOST],
