@@ -28,11 +28,10 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
-from homeassistant.helpers.network import NoURLAvailableError, get_url
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import TerraMasterConfigEntry
-from .const import CONF_SHARE_TOKEN, DOMAIN
+from .const import DOMAIN
 from .coordinator import TerraMasterDataUpdateCoordinator
 from .models import (
     TerraMasterCpuCore,
@@ -44,7 +43,7 @@ from .models import (
     TerraMasterShare,
     TerraMasterVolume,
 )
-from .share import resolve_share_storage, share_connection_urls, share_page_url
+from .share import resolve_share_storage, share_connection_urls
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -222,17 +221,6 @@ def _migrate_registry_defaults(hass: HomeAssistant) -> None:
                 break
 
 
-def _get_home_assistant_url(hass: HomeAssistant) -> str | None:
-    """Return an external or internal Home Assistant URL."""
-    try:
-        return get_url(hass, prefer_external=True)
-    except NoURLAvailableError:
-        try:
-            return get_url(hass, prefer_external=False)
-        except NoURLAvailableError:
-            return None
-
-
 def _nas_device_info(
     coordinator: TerraMasterDataUpdateCoordinator,
     entry: TerraMasterConfigEntry,
@@ -247,16 +235,6 @@ def _nas_device_info(
         model=coordinator.data.model,
         sw_version=coordinator.data.tos_version,
     )
-
-    share_token = entry.data.get(CONF_SHARE_TOKEN)
-    base_url = _get_home_assistant_url(coordinator.hass)
-
-    if base_url is not None and isinstance(share_token, str) and share_token:
-        device_info["configuration_url"] = share_page_url(
-            base_url,
-            entry.entry_id,
-            share_token,
-        )
 
     return device_info
 
@@ -424,29 +402,9 @@ class TerraMasterSharesPageSensor(
         entry: TerraMasterConfigEntry,
     ) -> None:
         super().__init__(coordinator)
-        self._home_assistant = coordinator.hass
-        self._entry_id = entry.entry_id
-        self._share_token = entry.data.get(CONF_SHARE_TOKEN)
-        self._base_url = _get_home_assistant_url(coordinator.hass)
         nas_id = entry.unique_id or entry.entry_id
         self._attr_unique_id = f"{nas_id}_shared_folders_page"
         self._attr_device_info = _nas_device_info(coordinator, entry)
-
-    def _page_url(self) -> str | None:
-        """Build the shared-folders page URL."""
-        if (
-            not isinstance(self._share_token, str)
-            or not self._share_token
-            or not self.coordinator.data.shares
-            or self._base_url is None
-        ):
-            return None
-        return share_page_url(self._base_url, self._entry_id, self._share_token)
-
-    @property
-    def available(self) -> bool:
-        """Return whether the shared-folders page is available."""
-        return super().available and self._page_url() is not None
 
     @property
     def native_value(self) -> int:
@@ -455,7 +413,7 @@ class TerraMasterSharesPageSensor(
 
     @property
     def extra_state_attributes(self) -> dict[str, object]:
-        """Return the shared-folder summary and landing-page URL."""
+        """Return the shared-folder summary."""
         protocols = sorted(
             {
                 protocol
@@ -467,8 +425,6 @@ class TerraMasterSharesPageSensor(
             "shares": [share.name for share in self.coordinator.data.shares],
             "protocols": protocols,
         }
-        if page_url := self._page_url():
-            attributes["open"] = page_url
         return attributes
 
 
@@ -623,11 +579,8 @@ class TerraMasterShareSensor(
     ) -> None:
         super().__init__(coordinator)
         self._share_name = share_name
-        self._home_assistant = coordinator.hass
         self._host = str(entry.data[CONF_HOST])
         self._username = str(entry.data[CONF_USERNAME])
-        self._entry_id = entry.entry_id
-        self._share_token = entry.data.get(CONF_SHARE_TOKEN)
         nas_id = entry.unique_id or entry.entry_id
         self._attr_unique_id = f"{nas_id}_share_{share_name}"
         self._attr_translation_placeholders = {"share": share_name}
@@ -693,15 +646,6 @@ class TerraMasterShareSensor(
             )
         urls = share_connection_urls(self._host, share, self._username)
         attributes.update({f"{protocol}_url": url for protocol, url in urls.items()})
-        if urls and isinstance(self._share_token, str) and self._share_token:
-            base_url = _get_home_assistant_url(self._home_assistant)
-            if base_url is not None:
-                attributes["open"] = share_page_url(
-                    base_url,
-                    self._entry_id,
-                    self._share_token,
-                    share.name,
-                )
         return attributes
 
 
