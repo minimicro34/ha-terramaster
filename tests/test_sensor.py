@@ -196,6 +196,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
     try:
         with patch(
             "custom_components.terramaster.sensor.get_url",
+            create=True,
             return_value="https://ha.example",
         ):
             await async_setup_entry(hass, entry, entities.extend)
@@ -308,6 +309,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
 
         with patch(
             "custom_components.terramaster.sensor.get_url",
+            create=True,
             return_value="https://ha.example",
         ):
             attributes = share_entity.extra_state_attributes
