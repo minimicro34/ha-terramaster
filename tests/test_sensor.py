@@ -15,7 +15,7 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.entity import EntityCategory
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.terramaster.const import CONF_SHARE_TOKEN, DOMAIN
+from custom_components.terramaster.const import DOMAIN
 from custom_components.terramaster.coordinator import TerraMasterDataUpdateCoordinator
 from custom_components.terramaster.models import (
     TerraMasterCpuCore,
@@ -161,7 +161,6 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
             CONF_PORT: 9222,
             CONF_USERNAME: "admin",
             CONF_PASSWORD: "secret",
-            CONF_SHARE_TOKEN: "test-share-token",
         },
         unique_id="nas.local:9222",
     )
@@ -295,10 +294,6 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         assert shares_page_entity.extra_state_attributes == {
             "shares": ["public"],
             "protocols": ["nfs", "smb"],
-            "open": (
-                "https://ha.example/api/terramaster/share?"
-                f"entry_id={entry.entry_id}&token=test-share-token"
-            ),
         }
 
         share_entity = next(
@@ -308,10 +303,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
             and entity.unique_id.endswith("share_public")
         )
         assert share_entity.device_info["name"] == "NAS-NICO"
-        assert share_entity.device_info["configuration_url"] == (
-            "https://ha.example/api/terramaster/share?"
-            f"entry_id={entry.entry_id}&token=test-share-token"
-        )
+        assert "configuration_url" not in share_entity.device_info
         assert share_entity.native_value == "/mnt/md0/public"
 
         with patch(
@@ -333,12 +325,7 @@ async def test_dynamic_storage_devices(hass: HomeAssistant) -> None:
         assert "available_bytes" not in attributes
         assert attributes["raid"] == "md0"
         assert attributes["raid_level"] == "raid1"
-        assert attributes["open"] == (
-            "https://ha.example/api/terramaster/share?"
-            f"entry_id={entry.entry_id}"
-            "&token=test-share-token"
-            "&share=public"
-        )
+        assert "open" not in attributes
         assert "afp_url" not in attributes
     finally:
         await coordinator.async_shutdown()
