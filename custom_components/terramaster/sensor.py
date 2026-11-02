@@ -24,6 +24,7 @@ from homeassistant.const import (
     UnitOfTime,
 )
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import EntityCategory
@@ -246,6 +247,13 @@ async def async_setup_entry(
 ) -> None:
     """Set up TerraMaster sensors."""
     _migrate_registry_defaults(hass)
+
+    # Clear the legacy permanent-token URL retained by existing device entries.
+    registry = dr.async_get(hass)
+    nas_id = entry.unique_id or entry.entry_id
+    device = registry.async_get_device(identifiers={(DOMAIN, nas_id)})
+    if device is not None and device.configuration_url is not None:
+        registry.async_update_device(device.id, configuration_url=None)
 
     async_add_entities(
         TerraMasterSensor(entry.runtime_data, entry, description)
