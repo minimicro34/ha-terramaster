@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from aiohttp.test_utils import make_mocked_request
 from homeassistant.const import CONF_HOST, CONF_USERNAME
 
-from custom_components.terramaster.const import CONF_SHARE_TOKEN, DOMAIN
+from custom_components.terramaster.const import DOMAIN
 from custom_components.terramaster.models import (
     TerraMasterRaid,
     TerraMasterShare,
@@ -18,9 +18,6 @@ from custom_components.terramaster.share import (
     share_connection_urls,
     share_page_url,
 )
-
-SHARE_TOKEN = "test-share-token"
-
 
 def _share() -> TerraMasterShare:
     return TerraMasterShare(
@@ -47,19 +44,17 @@ def test_share_urls() -> None:
     assert share_page_url(
         "https://ha.example/",
         "entry 1",
-        SHARE_TOKEN,
         "My share",
     ) == (
         "https://ha.example/api/terramaster/share?"
-        "entry_id=entry+1&token=test-share-token&share=My+share"
+        "entry_id=entry+1&share=My+share"
     )
     assert share_page_url(
         "https://ha.example/",
         "entry 1",
-        SHARE_TOKEN,
     ) == (
         "https://ha.example/api/terramaster/share?"
-        "entry_id=entry+1&token=test-share-token"
+        "entry_id=entry+1"
     )
 
 
@@ -112,7 +107,6 @@ def _hass() -> Mock:
         data={
             CONF_HOST: "nas.local",
             CONF_USERNAME: "admin",
-            CONF_SHARE_TOKEN: SHARE_TOKEN,
         },
         runtime_data=SimpleNamespace(data=_storage_data()),
     )
@@ -129,7 +123,7 @@ async def test_share_view() -> None:
     """The landing page presents actions, storage details, and NAS navigation."""
     request = make_mocked_request(
         "GET",
-        "/api/terramaster/share?entry_id=entry-1&token=test-share-token",
+        "/api/terramaster/share?entry_id=entry-1",
         headers={"Accept-Language": "fr-FR,fr;q=0.9"},
     )
 
@@ -139,6 +133,7 @@ async def test_share_view() -> None:
     ):
         response = await TerraMasterShareView(_hass()).get(request)
 
+    assert TerraMasterShareView.requires_auth is True
     assert response.status == 200
     assert 'href="smb://admin@nas.local/My%20share"' in response.text
     assert 'href="nfs://nas.local/mnt/md0/My%20share"' in response.text
@@ -162,7 +157,7 @@ async def test_share_detail_navigation() -> None:
     request = make_mocked_request(
         "GET",
         (
-            "/api/terramaster/share?entry_id=entry-1&token=test-share-token"
+            "/api/terramaster/share?entry_id=entry-1"
             "&share=My+share"
         ),
         headers={"Accept-Language": "fr-FR"},
@@ -177,7 +172,7 @@ async def test_share_detail_navigation() -> None:
     assert response.status == 200
     assert "← Partages TerraMaster" in response.text
     assert (
-        'href="/api/terramaster/share?entry_id=entry-1&amp;token=test-share-token"'
+        'href="/api/terramaster/share?entry_id=entry-1"'
         in response.text
     )
     assert "&amp;share=" not in response.text
