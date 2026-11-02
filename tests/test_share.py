@@ -19,6 +19,7 @@ from custom_components.terramaster.share import (
     share_page_url,
 )
 
+
 def _share() -> TerraMasterShare:
     return TerraMasterShare(
         name="My share",
