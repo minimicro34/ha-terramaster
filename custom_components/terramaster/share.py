@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import timedelta
 from html import escape
 from typing import cast
 from urllib.parse import quote, urlencode
 
 from aiohttp import web
 from homeassistant.components.http import HomeAssistantView
+from homeassistant.components.http.auth import async_sign_path
 from homeassistant.const import CONF_HOST, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
@@ -279,7 +281,9 @@ class TerraMasterShareView(HomeAssistantView):
         )
         nas_url = f"/config/devices/device/{device.id}" if device is not None else "/"
         nas_label = "Retour au NAS" if is_french else "Back to NAS"
-        list_url = share_page_url("", entry.entry_id)
+        list_url = async_sign_path(
+            self._hass, share_page_url("", entry.entry_id), timedelta(minutes=5)
+        )
         if share_name is not None:
             navigation = (
                 f'<a href="{escape(list_url, quote=True)}">← '
