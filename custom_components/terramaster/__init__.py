@@ -41,8 +41,9 @@ async def async_setup(
 
     async def async_get_share_link(call: ServiceCall) -> ServiceResponse:
         """Return a short-lived authenticated link, never stored in entity state."""
+        validated_data = GET_SHARE_LINK_SCHEMA(dict(call.data))
         entries = hass.config_entries.async_entries(DOMAIN)
-        entry_id = call.data.get("entry_id")
+        entry_id = validated_data.get("entry_id")
         if entry_id is not None:
             entries = [entry for entry in entries if entry.entry_id == entry_id]
         if len(entries) != 1:
@@ -50,7 +51,7 @@ async def async_setup(
         entry = entries[0]
         if not hasattr(entry, "runtime_data"):
             raise vol.Invalid("TerraMaster entry is not loaded")
-        share = call.data.get("share")
+        share = validated_data.get("share")
         if share is not None and not any(
             item.name == share for item in entry.runtime_data.data.shares
         ):
@@ -65,7 +66,6 @@ async def async_setup(
         DOMAIN,
         GET_SHARE_LINK,
         async_get_share_link,
-        schema=GET_SHARE_LINK_SCHEMA,
         supports_response=SupportsResponse.ONLY,
     )
     return True
