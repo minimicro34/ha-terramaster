@@ -20,8 +20,8 @@ Local monitoring of TerraMaster NAS devices from Home Assistant over SSH.
 - Shared-folder discovery from the TOS database
 - SMB, NFS and AFP protocol detection
 - Secure HTML pages for all shares or one selected share
-- Direct access to the shares page from the main NAS device in Home Assistant
-- Navigation between the NAS device, shares index and individual share pages
+- Authenticated shared-folder information page (no persistent access token)
+- Navigation between the shares index, individual share pages and NAS device
 - English and French translations
 
 The integration polls locally and does not require a cloud account.
@@ -77,13 +77,12 @@ The SSH host key is recorded during the first connection and checked on later co
 
 ## Shared folders
 
-The main NAS device provides a **Visit** link that opens the secure TerraMaster shares page directly.
+The shared-folder HTML view requires Home Assistant authentication. Direct browser navigation and the former **Visit** link are disabled until a safe short-lived link mechanism is available.
 
 The main **Shared folders** sensor displays the number of detected shares. Its attributes contain:
 
 - the share names;
 - all detected protocols;
-- `open_shares`, a secure link to the general shared-folder page.
 
 Each individual shared-folder diagnostic entity keeps the detailed information:
 
@@ -92,7 +91,6 @@ Each individual shared-folder diagnostic entity keeps the detailed information:
 - capacity, used space and available space in decimal GB;
 - usage percentage;
 - SMB, NFS and AFP URLs;
-- `open_share`, a secure link to the HTML page for that share.
 
 The shares index and individual share pages provide navigation back to the main NAS device. Individual share pages also provide a direct link back to the shares index.
 
@@ -157,7 +155,8 @@ Remove and re-add the integration only after confirming that the NAS address and
 - Communication stays on the local network.
 - No cloud service is used.
 - The SSH server host key is pinned.
-- Shared-folder HTML pages use a random token stored in the Home Assistant config entry.
+- Shared-folder HTML views require Home Assistant authentication and do not use persistent URL tokens.
+- Legacy shared-folder tokens are removed from existing configuration entries at startup.
 - Passwords are not exposed in entity attributes or URLs.
 
 ## Development checks
