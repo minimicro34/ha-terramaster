@@ -165,8 +165,14 @@ async def test_share_detail_navigation() -> None:
     )
 
     with (
-        patch("custom_components.terramaster.share.dr.async_get", return_value=_device_registry()),
-        patch("custom_components.terramaster.share.async_sign_path", return_value="/signed-index"),
+        patch(
+            "custom_components.terramaster.share.dr.async_get",
+            return_value=_device_registry(),
+        ),
+        patch(
+            "custom_components.terramaster.share.async_sign_path",
+            return_value="/signed-index",
+        ),
     ):
         response = await TerraMasterShareView(_hass()).get(request)
 
