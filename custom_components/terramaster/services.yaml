@@ -1,0 +1,16 @@
+get_share_link:
+  name: Get shared-folder link
+  description: Return a short-lived signed link to the TerraMaster shared-folders page.
+  fields:
+    entry_id:
+      name: Configuration entry ID
+      description: Required only if more than one TerraMaster NAS is configured.
+      example: 0123456789abcdef0123456789abcdef
+      selector:
+        text:
+    share:
+      name: Shared folder
+      description: Optional exact shared-folder name; omit for the index page.
+      example: public
+      selector:
+        text:
