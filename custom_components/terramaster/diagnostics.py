@@ -9,9 +9,9 @@ from homeassistant.components.diagnostics import REDACTED, async_redact_data
 from homeassistant.core import HomeAssistant
 
 from . import TerraMasterConfigEntry
-from .const import CONF_HOST_KEY
+from .const import CONF_HOST_KEY, CONF_SHARE_TOKEN
 
-TO_REDACT = {"host", "password", "username", CONF_HOST_KEY}
+TO_REDACT = {"host", "password", "username", CONF_HOST_KEY, CONF_SHARE_TOKEN}
 
 
 async def async_get_config_entry_diagnostics(
