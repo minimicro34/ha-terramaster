@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import secrets
 from dataclasses import dataclass
 from html import escape
 from typing import cast
@@ -14,7 +13,7 @@ from homeassistant.const import CONF_HOST, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import device_registry as dr
 
-from .const import CONF_SHARE_TOKEN, DOMAIN
+from .const import DOMAIN
 from .models import (
     TerraMasterData,
     TerraMasterRaid,
@@ -99,11 +98,10 @@ def share_connection_urls(
 def share_page_url(
     base_url: str,
     entry_id: str,
-    token: str,
     share_name: str | None = None,
 ) -> str:
     """Build an absolute URL for the shared-folder connection page."""
-    parameters = {"entry_id": entry_id, "token": token}
+    parameters = {"entry_id": entry_id}
     if share_name is not None:
         parameters["share"] = share_name
     query = urlencode(parameters)
@@ -115,7 +113,7 @@ class TerraMasterShareView(HomeAssistantView):
 
     url = SHARE_VIEW_PATH
     name = "api:terramaster:share"
-    requires_auth = False
+    requires_auth = True
 
     def __init__(self, hass: HomeAssistant) -> None:
         """Initialize the shared-folder view."""
@@ -124,7 +122,6 @@ class TerraMasterShareView(HomeAssistantView):
     async def get(self, request: web.Request) -> web.Response:
         """Render the connection page for one or all shared folders."""
         entry_id = request.query.get("entry_id")
-        provided_token = request.query.get("token")
         share_name = request.query.get("share")
 
         entry = (
@@ -134,14 +131,6 @@ class TerraMasterShareView(HomeAssistantView):
         )
         if entry is None or entry.domain != DOMAIN:
             raise web.HTTPNotFound
-
-        expected_token = entry.data.get(CONF_SHARE_TOKEN)
-        if (
-            not isinstance(expected_token, str)
-            or not isinstance(provided_token, str)
-            or not secrets.compare_digest(expected_token, provided_token)
-        ):
-            raise web.HTTPUnauthorized
 
         data = cast(TerraMasterData | None, getattr(entry.runtime_data, "data", None))
         if data is None:
@@ -290,7 +279,7 @@ class TerraMasterShareView(HomeAssistantView):
         )
         nas_url = f"/config/devices/device/{device.id}" if device is not None else "/"
         nas_label = "Retour au NAS" if is_french else "Back to NAS"
-        list_url = share_page_url("", entry.entry_id, provided_token)
+        list_url = share_page_url("", entry.entry_id)
         if share_name is not None:
             navigation = (
                 f'<a href="{escape(list_url, quote=True)}">← '
