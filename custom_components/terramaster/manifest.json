@@ -1,6 +1,9 @@
 {
   "domain": "terramaster",
   "name": "TerraMaster TOS",
+  "categories": [
+    "computers_network.nas_servers"
+  ],
   "codeowners": [
     "@minimicro34"
   ],
