@@ -31,15 +31,13 @@ jobs:
       - name: Pytest with coverage (minimum 80%)
         run: pytest --cov=custom_components.terramaster --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+
       - name: JavaScript syntax
         run: node --check custom_components/terramaster/www/terramaster-card.js
+
       - name: Card smoke tests
         run: node --test tests/js/*.test.cjs
 
