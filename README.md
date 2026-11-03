@@ -235,3 +235,20 @@ sensitive NAS information.
 Copyright (c) 2026 minimicro34
 
 This project is licensed under the [GNU General Public License v3.0 or later](LICENSE).
+
+## TerraMaster Lovelace dashboard (experimental)
+
+The integration bundles a responsive `custom:terramaster-card` dashboard, inspired by NAS management consoles. It displays available CPU, RAM, temperature, storage, SMART, RAID, volume, network, and service sensors, plus an **Open shares** button. The card does not store authentication tokens; it calls `terramaster.get_share_link` on click and opens a five-minute signed link.
+
+In a manual dashboard card, use:
+
+```yaml
+type: custom:terramaster-card
+title: My TerraMaster NAS
+# Optional if automatic entity discovery does not match your NAS:
+# entity_prefix: sensor.my_nas
+# Required if more than one TerraMaster integration entry exists:
+# entry_id: your_config_entry_id
+```
+
+In Lovelace storage mode the bundled JavaScript resource is registered automatically. For YAML-mode Lovelace, add `/terramaster/terramaster-card.js?v=1.1.3` as a JavaScript module resource manually. The browser must allow opening a new tab for the signed shares link. The dashboard is experimental and will be refined based on device testing.
