@@ -32,9 +32,11 @@ class TerraMasterCard extends HTMLElement {
         hass.callWS({type:'config/entity_registry/list'}),
         hass.callWS({type:'config/device_registry/list'})
       ]);
-      if (this._hass!==hass && !this._hass) return;
-      const ownedDevices=new Set(devices.filter(d=>d.config_entries?.some(id=>!this.config?.entry_id || id===this.config.entry_id)).map(d=>d.id));
-      this._registryEntries=entries.filter(e=>e.platform==='terramaster' && (!this.config?.entry_id || e.config_entry_id===this.config.entry_id || (e.device_id && ownedDevices.has(e.device_id))));
+      const terramaster=entries.filter(e=>e.platform==='terramaster');
+      const requested=this.config?.entry_id;
+      const selected=requested || terramaster.find(e=>e.config_entry_id)?.config_entry_id || devices.find(d=>d.config_entries?.length && terramaster.some(e=>e.device_id===d.id))?.config_entries?.[0];
+      const ownedDevices=new Set(devices.filter(d=>d.config_entries?.includes(selected)).map(d=>d.id));
+      this._registryEntries=terramaster.filter(e=>selected && (e.config_entry_id===selected || (e.device_id && ownedDevices.has(e.device_id))));
     } catch(e) { this._registryError=e; }
     finally {this._registryLoading=false;this.render();}
   }
