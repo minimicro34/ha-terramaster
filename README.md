@@ -178,9 +178,17 @@ The Python test suite requires at least **80% coverage** in CI. The XML report i
 
 ## Release history
 
-### 1.1.3 (in development)
+### 1.1.5 (in development)
 
-Experimental bundled Lovelace NAS dashboard with collapsible detail sections, a secure signed-share-link action, JavaScript tests, and Python coverage enforcement. Not released yet.
+Beta testing: localized entity discovery, native Sections grid sizing, and compact numeric readings.
+
+### 1.1.4
+
+Home Assistant device registry compatibility update.
+
+### 1.1.3
+
+Experimental bundled Lovelace NAS dashboard with collapsible detail sections, a secure signed-share-link action, JavaScript tests, and Python coverage enforcement. Released November 2026.
 
 ### 1.1.2
 
@@ -194,7 +202,7 @@ Improved SMART handling for TerraMaster system disks, expanded RAID information 
 
 First stable release with system, SMART, RAID, volume, network, services and shared-folder monitoring.
 
-See [CHANGELOG.md](CHANGELOG.md) for the complete release history, including beta releases.
+See [CHANGELOG.md](CHANGELOG.md) for the complete release history, with stable release entries.
 
 ## Contributing
 
@@ -257,15 +265,15 @@ This project is licensed under the [GNU General Public License v3.0 or later](LI
 
 The integration bundles a responsive `custom:terramaster-card` dashboard, inspired by NAS management consoles. It displays available CPU, RAM, temperature, storage, SMART, RAID, volume, network, and service sensors, plus an **Open shares** button. The card does not store authentication tokens; it calls `terramaster.get_share_link` on click and opens a five-minute signed link.
 
-In a manual dashboard card, use:
+In a manual dashboard card (Sections or Panel view), use:
 
 ```yaml
 type: custom:terramaster-card
 title: My TerraMaster NAS
-# Optional if automatic entity discovery does not match your NAS:
+# Optional legacy fallback when the entity registry is unavailable:
 # entity_prefix: sensor.my_nas
-# Required if more than one TerraMaster integration entry exists:
+# Recommended if more than one TerraMaster integration entry exists:
 # entry_id: your_config_entry_id
 ```
 
-In Lovelace storage mode the bundled JavaScript resource is registered automatically. For YAML-mode Lovelace, add `/terramaster/terramaster-card.js?v=1.1.3` as a JavaScript module resource manually. The browser must allow opening a new tab for the signed shares link. Detail sections (disks/SMART, RAID, volumes, network, and services) are collapsed by default and retain their expanded state during refreshes. The dashboard is experimental and will be refined based on device testing.
+In Lovelace storage mode the bundled JavaScript resource is registered automatically. For YAML-mode Lovelace, add `/terramaster/terramaster-card.js?v=<installed-version>` as a JavaScript module resource manually (replace `<installed-version>` with the version from `manifest.json`). In Sections views, the card requests the full width of its section through Home Assistant's native grid options. The actual section width is controlled by the dashboard layout; Panel views also work. No custom CSS or special YAML grid settings are required. The browser must allow opening a new tab for the signed shares link. Detail sections (disks/SMART, RAID, volumes, network, and services) are collapsed by default and retain their expanded state during refreshes. The dashboard is experimental and will be refined based on device testing.
