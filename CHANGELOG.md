@@ -6,16 +6,17 @@ The format is based on Keep a Changelog.
 
 ---
 
-## [1.1.5] - Unreleased
+## [1.1.5] - 2026-11-03
 
 ### Fixed
 - Discover TerraMaster sensors through the Home Assistant entity registry, including translated entity IDs.
 - Resolve dashboard metrics from stable entity unique IDs and scope discovery to one NAS.
 - Request native full-section width in Home Assistant Sections dashboards while retaining Panel view support.
 - Format numeric sensor values to two decimal places and convert large GB readings to TB for a more compact dashboard.
+- Show NAS uptime and disk operating durations in human-readable days, hours and minutes.
 
 ### Tests
-- Cover translated entity IDs, NAS isolation, native Sections grid options and numeric formatting.
+- Cover translated entity IDs, NAS isolation, native Sections grid options, numeric formatting and durations.
 
 ## [1.1.4] - 2026-11-03
 
