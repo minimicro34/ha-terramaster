@@ -34,6 +34,16 @@ const formatReading = (state, unit='') => {
   return [new Intl.NumberFormat('fr-FR',{maximumFractionDigits:2}).format(value),displayUnit];
 };
 
+const formatDuration = (state) => {
+  const days=Number(state);
+  if (!Number.isFinite(days) || days<0) return String(state ?? '—');
+  const minutes=Math.round(days*24*60);
+  const d=Math.floor(minutes/1440);
+  const h=Math.floor((minutes%1440)/60);
+  const m=minutes%60;
+  return [d?' '+d+' j':'',h?' '+h+' h':'',m?' '+m+' min':''].join('').trim() || '0 min';
+};
+
 class TerraMasterCard extends HTMLElement {
   setConfig(config) { this.config = { ...config }; if (!this.shadowRoot) this.attachShadow({mode:'open'}); this.render(); }
   set hass(hass) { this._hass=hass; if (!this._registryLoading && !this._registryEntries && typeof hass.callWS==='function') this.loadRegistry(hass); this.render(); }
@@ -70,8 +80,8 @@ class TerraMasterCard extends HTMLElement {
     const entities=this.entities();
     const lookup=(suffix)=>entities.find(([, ,uid])=>uid.endsWith('_'+suffix))?.[1];
     const name=this.config?.title || (valid(lookup('model')) ? lookup('model').state : null) || 'TerraMaster NAS';
-    const tile=(label,key,unit='',meter=false)=>{const s=lookup(key);if(!valid(s))return '';return `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(formatReading(s.state)[0])}${esc(unit)}</div>${meter?`<div class="meter"><div class="fill" style="width:${pct(s)}%"></div></div>`:''}</div>`;};
-    const group=(label,filter)=>{const items=entities.filter(([, ,uid])=>filter(uid)).filter(([,s])=>valid(s));if(!items.length)return '';return `<details class="accordion" data-section="${esc(label)}" ${expanded.has(label)?'open':''}><summary class="section">${esc(label)} (${items.length})</summary><div class="rows">${items.map(([id,s])=>`<div class="item"><div>${esc(s.attributes?.friendly_name||id)}<small>${esc(id)}</small></div><span>${esc(formatReading(s.state,s.attributes?.unit_of_measurement||'')[0])} ${esc(formatReading(s.state,s.attributes?.unit_of_measurement||'')[1])}</span></div>`).join('')}</div></details>`;};
+    const tile=(label,key,unit='',meter=false)=>{const s=lookup(key);if(!valid(s))return '';return `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(key==='uptime'?formatDuration(s.state):formatReading(s.state)[0])}${key==='uptime'?'':esc(unit)}</div>${meter?`<div class="meter"><div class="fill" style="width:${pct(s)}%"></div></div>`:''}</div>`;};
+    const group=(label,filter)=>{const items=entities.filter(([, ,uid])=>filter(uid)).filter(([,s])=>valid(s));if(!items.length)return '';return `<details class="accordion" data-section="${esc(label)}" ${expanded.has(label)?'open':''}><summary class="section">${esc(label)} (${items.length})</summary><div class="rows">${items.map(([id,s])=>`<div class="item"><div>${esc(s.attributes?.friendly_name||id)}<small>${esc(id)}</small></div><span>${esc(/_disk_.*_(power_on_hours|uptime|runtime|operating_time)$/.test(id) && ['d','j','days'].includes(s.attributes?.unit_of_measurement) ? formatDuration(s.state) : formatReading(s.state,s.attributes?.unit_of_measurement||'').join(' '))</span></div>`).join('')}</div></details>`;};
     const html=`<style>${STYLES}</style><ha-card><div class="header"><div><div class="title">${esc(name)}</div><div class="subtitle">TOS ${esc(lookup('tos_version')?.state)} · ${esc(lookup('cpu_model')?.state)}</div></div><div class="status">${entities.length?'● Connecté':'● Aucune entité détectée'}</div></div>
     <div class="grid">${tile('CPU','cpu_usage',' %',true)}${tile('Mémoire','memory_usage',' %',true)}${tile('Température','temperature',' °C')}${tile('Stockage','disk_usage',' %',true)}${tile('Disponibilité','uptime',' j')}${tile('Partages','shared_folders_page')}</div>
     ${group('Disques et SMART',id=>/_disk_/.test(id))}${group('RAID',id=>/_raid_/.test(id))}${group('Volumes',id=>/_volume_/.test(id))}${group('Réseau',id=>/_network_/.test(id))}${group('Services',id=>/_(ssh|telnet|snmp)_service$/.test(id))}
