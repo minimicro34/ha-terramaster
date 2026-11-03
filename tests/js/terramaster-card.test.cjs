@@ -86,7 +86,7 @@ test('invalid signed link is rejected and popup is closed', async () => {
 
 test('Sections dashboard uses full-width grid options', () => {
   const instance=createCard();
-  assert.deepEqual(JSON.parse(JSON.stringify(instance.getGridOptions())),{columns:12,min_columns:6,rows:'auto'});
+  assert.deepEqual(JSON.parse(JSON.stringify(instance.getGridOptions())),{columns:'full',min_columns:6,rows:'auto'});
 });
 
 test('registry discovers French entity IDs using stable unique IDs and isolates NAS entries', async () => {
