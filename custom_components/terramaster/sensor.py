@@ -251,7 +251,7 @@ async def async_setup_entry(
     # Clear the legacy permanent-token URL retained by existing device entries.
     registry = dr.async_get(hass)
     nas_id = entry.unique_id or entry.entry_id
-    device = registry.async_get_device(identifiers={(DOMAIN, nas_id)})
+    device = registry.async_get_device_by_identifier((DOMAIN, nas_id), entry.entry_id)
     if device is not None and device.configuration_url is not None:
         registry.async_update_device(device.id, configuration_url=None)
 
