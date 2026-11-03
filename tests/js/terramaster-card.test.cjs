@@ -125,3 +125,14 @@ test('formats large capacities and numeric values without excessive decimals', (
   assert.match(instance.shadowRoot.innerHTML,/0,43 Mbit\/s/);
   assert.doesNotMatch(instance.shadowRoot.innerHTML,/1000\.204886016/);
 });
+
+test('formats NAS uptime and localized disk operating days as durations', () => {
+  const instance=createCard({entity_prefix:'sensor.my_nas'});
+  instance.hass={states:{
+    'sensor.my_nas_uptime':{state:'24.58',attributes:{}},
+    'sensor.my_nas_disk_sdb_runtime':{state:'3976.29',attributes:{friendly_name:'DISK sdb Durée de fonctionnement',unit_of_measurement:'d'}}
+  }};
+  assert.match(instance.shadowRoot.innerHTML,/24 j 13 h 55 min/);
+  assert.match(instance.shadowRoot.innerHTML,/3 976 j 6 h 58 min/);
+  assert.doesNotMatch(instance.shadowRoot.innerHTML,/24,58 j/);
+});
