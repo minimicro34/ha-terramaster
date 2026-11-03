@@ -110,3 +110,18 @@ test('registry discovers French entity IDs using stable unique IDs and isolates 
   assert.match(instance.shadowRoot.innerHTML,/Réseau/);
   assert.doesNotMatch(instance.shadowRoot.innerHTML,/>99 %</);
 });
+
+test('formats large capacities and numeric values without excessive decimals', () => {
+  const instance=createCard({entry_id:'nas-one'});
+  instance._registryEntries=[
+    {entity_id:'sensor.disk_sdb_capacite',unique_id:'nas_disk_sdb_size'},
+    {entity_id:'sensor.network_eth0_debit_entrant',unique_id:'nas_network_eth0_receive_rate'}
+  ];
+  instance.hass={states:{
+    'sensor.disk_sdb_capacite':{state:'1000.204886016',attributes:{friendly_name:'Disk capacity',unit_of_measurement:'GB'}},
+    'sensor.network_eth0_debit_entrant':{state:'0.43456789',attributes:{friendly_name:'Incoming rate',unit_of_measurement:'Mbit/s'}}
+  }};
+  assert.match(instance.shadowRoot.innerHTML,/1 To/);
+  assert.match(instance.shadowRoot.innerHTML,/0,43 Mbit\/s/);
+  assert.doesNotMatch(instance.shadowRoot.innerHTML,/1000\.204886016/);
+});
