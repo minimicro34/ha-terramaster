@@ -53,7 +53,7 @@ class TerraMasterCard extends HTMLElement {
     finally {this._registryLoading=false;this.render();}
   }
   getCardSize() { return 6; }
-  getGridOptions() { return {columns:12,min_columns:6,rows:'auto'}; }
+  getGridOptions() { return {columns:'full',min_columns:6,rows:'auto'}; }
   static getStubConfig() { return {type:'custom:terramaster-card'}; }
   entities() {
     const states=this._hass?.states||{};
