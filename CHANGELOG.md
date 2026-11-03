@@ -6,6 +6,16 @@ The format is based on Keep a Changelog.
 
 ---
 
+## [1.1.5-beta1] - 2026-11-03
+
+### Fixed
+- Discover TerraMaster sensors through the Home Assistant entity registry, including translated entity IDs.
+- Resolve dashboard metrics from stable entity unique IDs and scope discovery to one NAS.
+- Support full-width cards in Home Assistant Sections dashboards.
+
+### Tests
+- Cover translated entity IDs, NAS isolation and Sections grid options.
+
 ## [1.1.4] - 2026-11-03
 
 ### Fixed
