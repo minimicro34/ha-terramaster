@@ -4,7 +4,6 @@ Local monitoring of TerraMaster NAS devices from Home Assistant over SSH.
 
 [![Release](https://img.shields.io/github/v/release/minimicro34/ha-terramaster)](https://github.com/minimicro34/ha-terramaster/releases)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://www.hacs.xyz/)
-[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-brightgreen)](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml)
 [![Validate](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml/badge.svg)](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%E2%98%95-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/minimicro34)
 [![License](https://img.shields.io/github/license/minimicro34/ha-terramaster)](LICENSE)
