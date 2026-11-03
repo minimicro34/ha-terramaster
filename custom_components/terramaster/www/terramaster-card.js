@@ -39,7 +39,7 @@ class TerraMasterCard extends HTMLElement {
     const expanded = new Set([...this.shadowRoot.querySelectorAll('details[open]')].map(node=>node.dataset.section));
     const entities=this.entities();
     const lookup=(suffix)=>entities.find(([id])=>id.endsWith('_'+suffix))?.[1];
-    const name=this.config?.title || lookup('model')?.attributes?.friendly_name?.replace(/ model$/i,'') || 'TerraMaster NAS';
+    const name=this.config?.title || (valid(lookup('model')) ? lookup('model').state : null) || 'TerraMaster NAS';
     const tile=(label,key,unit='',meter=false)=>{const s=lookup(key);if(!valid(s))return '';return `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(s.state)}${esc(unit)}</div>${meter?`<div class="meter"><div class="fill" style="width:${pct(s)}%"></div></div>`:''}</div>`;};
     const group=(label,filter)=>{const items=entities.filter(([id])=>filter(id)).filter(([,s])=>valid(s));if(!items.length)return '';return `<details class="accordion" data-section="${esc(label)}" ${expanded.has(label)?'open':''}><summary class="section">${esc(label)} (${items.length})</summary><div class="rows">${items.map(([id,s])=>`<div class="item"><div>${esc(s.attributes?.friendly_name||id)}<small>${esc(id)}</small></div><span>${esc(s.state)} ${esc(s.attributes?.unit_of_measurement||'')}</span></div>`).join('')}</div></details>`;};
     const html=`<style>${STYLES}</style><ha-card><div class="header"><div><div class="title">${esc(name)}</div><div class="subtitle">TOS ${esc(lookup('tos_version')?.state)} · ${esc(lookup('cpu_model')?.state)}</div></div><div class="status">${entities.length?'● Connecté':'● Aucune entité détectée'}</div></div>
