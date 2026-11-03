@@ -10,7 +10,7 @@ ha-card{overflow:hidden;padding:20px;background:var(--ha-card-background,var(--c
 .label{font-size:12px;color:var(--secondary-text-color);margin-bottom:9px}.value{font-size:21px;font-weight:650;overflow-wrap:anywhere}
 .meter{height:7px;border-radius:8px;background:var(--divider-color);overflow:hidden;margin-top:12px}
 .fill{height:100%;background:var(--primary-color);border-radius:8px;transition:width .25s}
-.section{font-size:15px;font-weight:650;margin:22px 0 10px}.rows{display:grid;gap:8px}
+.section{font-size:15px;font-weight:650}.accordion{margin-top:12px;border:1px solid var(--divider-color);border-radius:12px;padding:12px}.accordion summary{cursor:pointer}.rows{display:grid;gap:8px;margin-top:12px}
 .item{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:11px 13px;border:1px solid var(--divider-color);border-radius:10px}
 .item small{display:block;color:var(--secondary-text-color);margin-top:3px}.item span:last-child{text-align:right;overflow-wrap:anywhere}
 .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
@@ -36,11 +36,12 @@ class TerraMasterCard extends HTMLElement {
   }
   render() {
     if (!this.shadowRoot || !this._hass) return;
+    const expanded = new Set([...this.shadowRoot.querySelectorAll('details[open]')].map(node=>node.dataset.section));
     const entities=this.entities();
     const lookup=(suffix)=>entities.find(([id])=>id.endsWith('_'+suffix))?.[1];
     const name=this.config?.title || lookup('model')?.attributes?.friendly_name?.replace(/ model$/i,'') || 'TerraMaster NAS';
     const tile=(label,key,unit='',meter=false)=>{const s=lookup(key);if(!valid(s))return '';return `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(s.state)}${esc(unit)}</div>${meter?`<div class="meter"><div class="fill" style="width:${pct(s)}%"></div></div>`:''}</div>`;};
-    const group=(label,filter)=>{const items=entities.filter(([id])=>filter(id)).filter(([,s])=>valid(s));if(!items.length)return '';return `<div class="section">${esc(label)}</div><div class="rows">${items.map(([id,s])=>`<div class="item"><div>${esc(s.attributes?.friendly_name||id)}<small>${esc(id)}</small></div><span>${esc(s.state)} ${esc(s.attributes?.unit_of_measurement||'')}</span></div>`).join('')}</div>`;};
+    const group=(label,filter)=>{const items=entities.filter(([id])=>filter(id)).filter(([,s])=>valid(s));if(!items.length)return '';return `<details class="accordion" data-section="${esc(label)}" ${expanded.has(label)?'open':''}><summary class="section">${esc(label)} (${items.length})</summary><div class="rows">${items.map(([id,s])=>`<div class="item"><div>${esc(s.attributes?.friendly_name||id)}<small>${esc(id)}</small></div><span>${esc(s.state)} ${esc(s.attributes?.unit_of_measurement||'')}</span></div>`).join('')}</div></details>`;};
     const html=`<style>${STYLES}</style><ha-card><div class="header"><div><div class="title">${esc(name)}</div><div class="subtitle">TOS ${esc(lookup('tos_version')?.state)} · ${esc(lookup('cpu_model')?.state)}</div></div><div class="status">${entities.length?'● Connecté':'● Aucune entité détectée'}</div></div>
     <div class="grid">${tile('CPU','cpu_usage',' %',true)}${tile('Mémoire','memory_usage',' %',true)}${tile('Température','temperature',' °C')}${tile('Stockage','disk_usage',' %',true)}${tile('Disponibilité','uptime',' j')}${tile('Partages','shared_folders_page')}</div>
     ${group('Disques et SMART',id=>/_disk_/.test(id))}${group('RAID',id=>/_raid_/.test(id))}${group('Volumes',id=>/_volume_/.test(id))}${group('Réseau',id=>/_network_/.test(id))}${group('Services',id=>/_(ssh|telnet|snmp)$/.test(id))}
