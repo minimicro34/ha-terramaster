@@ -5,7 +5,7 @@ const vm = require('node:vm');
 const path = require('node:path');
 const source = fs.readFileSync(path.join(__dirname,'../../custom_components/terramaster/www/terramaster-card.js'),'utf8');
 const registered = new Map();
-class HTMLElement { attachShadow(){this.shadowRoot={innerHTML:'',getElementById:()=>({addEventListener(){},textContent:'',disabled:false})};return this.shadowRoot;} }
+class HTMLElement { attachShadow(){const elements=new Map();this.shadowRoot={innerHTML:'',querySelectorAll:()=>[],getElementById:(id)=>{if(!elements.has(id))elements.set(id,{addEventListener(){},textContent:'',disabled:false});return elements.get(id);}};return this.shadowRoot;} }
 const context={HTMLElement,customElements:{get:k=>registered.get(k),define:(k,v)=>registered.set(k,v)},window:{customCards:[]}};
 vm.runInNewContext(source,context,{filename:'terramaster-card.js'});
 const Card=registered.get('terramaster-card');
