@@ -11,11 +11,15 @@ git clone https://github.com/minimicro34/ha-terramaster.git
 cd ha-terramaster
 ```
 
-Install the test dependencies:
+Create an isolated Python environment and install the test dependencies:
 
 ```bash
-pip install -r requirements_test.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements_test.txt
 ```
+
+Use Python 3.14, matching the CI workflow. Node.js 22 is needed for the bundled Lovelace card tests.
 
 ## Validation
 
@@ -24,16 +28,19 @@ Before submitting a change, run:
 ```bash
 ruff check .
 mypy custom_components/terramaster
-pytest
+pytest --cov=custom_components.terramaster --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+node --check custom_components/terramaster/www/terramaster-card.js
+node --test tests/js/*.test.cjs
 ```
 
-All checks must pass before submitting a pull request.
+All checks must pass before submitting a pull request. Python coverage must remain at or above **80%**. The generated `coverage.xml` report is local and is not committed.
 
 GitHub Actions also runs:
 
 - Ruff
 - mypy
-- pytest
+- pytest with a minimum 80% Python coverage threshold
+- JavaScript syntax and Node.js card tests
 - Home Assistant Hassfest
 - HACS validation
 
