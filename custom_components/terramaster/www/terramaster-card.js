@@ -30,7 +30,9 @@ class TerraMasterCard extends HTMLElement {
   entities() {
     const all=Object.entries(this._hass?.states||{}).filter(([id])=>id.startsWith('sensor.'));
     const prefix=this.config?.entity_prefix;
-    return all.filter(([id,s])=>prefix ? id.startsWith(prefix) : (id.includes('terramaster') || /terramaster/i.test(s.attributes?.friendly_name||'')));
+    const guessed = all.find(([id])=>id.endsWith('_shared_folders_page'));
+    const guessedPrefix = guessed?.[0].replace(/_shared_folders_page$/, '');
+    return all.filter(([id,s])=>prefix ? id.startsWith(prefix) : (guessedPrefix ? id.startsWith(guessedPrefix+'_') : (id.includes('terramaster') || /terramaster/i.test(s.attributes?.friendly_name||''))));
   }
   render() {
     if (!this.shadowRoot || !this._hass) return;
