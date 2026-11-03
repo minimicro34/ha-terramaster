@@ -6,6 +6,22 @@ The format is based on Keep a Changelog.
 
 ---
 
+## [Unreleased] - planned 1.1.3
+
+### Added
+- Bundle an experimental Lovelace NAS dashboard with CPU, memory, temperature, storage and system summary tiles.
+- Add collapsible disk/SMART, RAID, volume, network and service detail sections that retain their expanded state on refresh.
+- Add a shares button that requests a short-lived signed URL through `terramaster.get_share_link` without storing a permanent token in the card.
+- Add JavaScript syntax checks and card tests for rendering, collapsible sections, HTML escaping and signed-link handling.
+- Enforce a minimum of 80% Python test coverage in GitHub Actions and generate a coverage XML report.
+
+### Changed
+- Display the NAS model in the dashboard header when available.
+- Document local virtual-environment setup and development checks.
+
+### Fixed
+- Avoid exposing a legacy persistent share-page URL through the NAS device configuration link.
+
 ## [1.1.2] - 2026-11-02
 
 Security hardening and authenticated share-page access.
