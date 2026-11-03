@@ -5,3 +5,7 @@ __pycache__/
 .test-deps/
 .test-asyncssh/
 *.py[cod]
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
