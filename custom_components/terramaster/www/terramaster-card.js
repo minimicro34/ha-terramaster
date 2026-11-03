@@ -24,27 +24,43 @@ const pct = (s) => Math.max(0,Math.min(100,Number(s?.state)||0));
 
 class TerraMasterCard extends HTMLElement {
   setConfig(config) { this.config = { ...config }; if (!this.shadowRoot) this.attachShadow({mode:'open'}); this.render(); }
-  set hass(hass) { this._hass=hass; this.render(); }
+  set hass(hass) { this._hass=hass; if (!this._registryLoading && !this._registryEntries && typeof hass.callWS==='function') this.loadRegistry(hass); this.render(); }
+  async loadRegistry(hass) {
+    this._registryLoading=true;
+    try {
+      const [entries,devices]=await Promise.all([
+        hass.callWS({type:'config/entity_registry/list'}),
+        hass.callWS({type:'config/device_registry/list'})
+      ]);
+      if (this._hass!==hass && !this._hass) return;
+      const ownedDevices=new Set(devices.filter(d=>d.config_entries?.some(id=>!this.config?.entry_id || id===this.config.entry_id)).map(d=>d.id));
+      this._registryEntries=entries.filter(e=>e.platform==='terramaster' && (!this.config?.entry_id || e.config_entry_id===this.config.entry_id || (e.device_id && ownedDevices.has(e.device_id))));
+    } catch(e) { this._registryError=e; }
+    finally {this._registryLoading=false;this.render();}
+  }
   getCardSize() { return 6; }
+  getGridOptions() { return {columns:12,min_columns:6,rows:'auto'}; }
   static getStubConfig() { return {type:'custom:terramaster-card'}; }
   entities() {
-    const all=Object.entries(this._hass?.states||{}).filter(([id])=>id.startsWith('sensor.'));
+    const states=this._hass?.states||{};
+    if (this._registryEntries) return this._registryEntries.filter(e=>states[e.entity_id] && e.entity_id.startsWith('sensor.')).map(e=>[e.entity_id,states[e.entity_id],e.unique_id||'']);
+    const all=Object.entries(states).filter(([id])=>id.startsWith('sensor.'));
     const prefix=this.config?.entity_prefix;
-    const guessed = all.find(([id])=>id.endsWith('_shared_folders_page'));
-    const guessedPrefix = guessed?.[0].replace(/_shared_folders_page$/, '');
-    return all.filter(([id,s])=>prefix ? id.startsWith(prefix) : (guessedPrefix ? id.startsWith(guessedPrefix+'_') : (id.includes('terramaster') || /terramaster/i.test(s.attributes?.friendly_name||''))));
+    const guessed=all.find(([id])=>id.endsWith('_shared_folders_page'));
+    const guessedPrefix=guessed?.[0].replace(/_shared_folders_page$/,'');
+    return all.filter(([id,s])=>prefix ? id.startsWith(prefix) : (guessedPrefix ? id.startsWith(guessedPrefix+'_') : (id.includes('terramaster') || /terramaster/i.test(s.attributes?.friendly_name||'')))).map(([id,s])=>[id,s,id]);
   }
   render() {
     if (!this.shadowRoot || !this._hass) return;
     const expanded = new Set([...this.shadowRoot.querySelectorAll('details[open]')].map(node=>node.dataset.section));
     const entities=this.entities();
-    const lookup=(suffix)=>entities.find(([id])=>id.endsWith('_'+suffix))?.[1];
+    const lookup=(suffix)=>entities.find(([, ,uid])=>uid.endsWith('_'+suffix))?.[1];
     const name=this.config?.title || (valid(lookup('model')) ? lookup('model').state : null) || 'TerraMaster NAS';
     const tile=(label,key,unit='',meter=false)=>{const s=lookup(key);if(!valid(s))return '';return `<div class="tile"><div class="label">${esc(label)}</div><div class="value">${esc(s.state)}${esc(unit)}</div>${meter?`<div class="meter"><div class="fill" style="width:${pct(s)}%"></div></div>`:''}</div>`;};
-    const group=(label,filter)=>{const items=entities.filter(([id])=>filter(id)).filter(([,s])=>valid(s));if(!items.length)return '';return `<details class="accordion" data-section="${esc(label)}" ${expanded.has(label)?'open':''}><summary class="section">${esc(label)} (${items.length})</summary><div class="rows">${items.map(([id,s])=>`<div class="item"><div>${esc(s.attributes?.friendly_name||id)}<small>${esc(id)}</small></div><span>${esc(s.state)} ${esc(s.attributes?.unit_of_measurement||'')}</span></div>`).join('')}</div></details>`;};
+    const group=(label,filter)=>{const items=entities.filter(([, ,uid])=>filter(uid)).filter(([,s])=>valid(s));if(!items.length)return '';return `<details class="accordion" data-section="${esc(label)}" ${expanded.has(label)?'open':''}><summary class="section">${esc(label)} (${items.length})</summary><div class="rows">${items.map(([id,s])=>`<div class="item"><div>${esc(s.attributes?.friendly_name||id)}<small>${esc(id)}</small></div><span>${esc(s.state)} ${esc(s.attributes?.unit_of_measurement||'')}</span></div>`).join('')}</div></details>`;};
     const html=`<style>${STYLES}</style><ha-card><div class="header"><div><div class="title">${esc(name)}</div><div class="subtitle">TOS ${esc(lookup('tos_version')?.state)} · ${esc(lookup('cpu_model')?.state)}</div></div><div class="status">${entities.length?'● Connecté':'● Aucune entité détectée'}</div></div>
     <div class="grid">${tile('CPU','cpu_usage',' %',true)}${tile('Mémoire','memory_usage',' %',true)}${tile('Température','temperature',' °C')}${tile('Stockage','disk_usage',' %',true)}${tile('Disponibilité','uptime',' j')}${tile('Partages','shared_folders_page')}</div>
-    ${group('Disques et SMART',id=>/_disk_/.test(id))}${group('RAID',id=>/_raid_/.test(id))}${group('Volumes',id=>/_volume_/.test(id))}${group('Réseau',id=>/_network_/.test(id))}${group('Services',id=>/_(ssh|telnet|snmp)$/.test(id))}
+    ${group('Disques et SMART',id=>/_disk_/.test(id))}${group('RAID',id=>/_raid_/.test(id))}${group('Volumes',id=>/_volume_/.test(id))}${group('Réseau',id=>/_network_/.test(id))}${group('Services',id=>/_(ssh|telnet|snmp)_service$/.test(id))}
     <div class="actions"><button id="shares">Ouvrir les partages ↗</button></div><div class="error" id="error" role="alert"></div></ha-card>`;
     this.shadowRoot.innerHTML=html;
     this.shadowRoot.getElementById('shares').addEventListener('click',()=>this.openShares());
