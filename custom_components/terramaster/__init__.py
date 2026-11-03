@@ -20,6 +20,7 @@ from homeassistant.helpers.typing import ConfigType
 from .api import TerraMasterApiClient
 from .const import CONF_HOST_KEY, CONF_SHARE_TOKEN, DOMAIN, PLATFORMS
 from .coordinator import TerraMasterDataUpdateCoordinator
+from .frontend import async_register_card
 from .share import TerraMasterShareView, share_page_url
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
@@ -97,6 +98,8 @@ async def async_setup_entry(
     await coordinator.async_config_entry_first_refresh()
 
     entry.runtime_data = coordinator
+
+    await async_register_card(hass)
 
     await hass.config_entries.async_forward_entry_setups(
         entry,
