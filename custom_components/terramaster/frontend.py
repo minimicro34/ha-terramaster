@@ -25,7 +25,10 @@ async def async_register_card(hass: HomeAssistant) -> None:
     async with hass.data.setdefault(_LOCK_KEY, asyncio.Lock()):
         if not hass.data.get(_PATH_KEY):
             await hass.http.async_register_static_paths(
-                [StaticPathConfig(_CARD_PATH, str(Path(__file__).parent / "www" / "terramaster-card.js"),
+                [
+                    StaticPathConfig(
+                        _CARD_PATH,
+                        str(Path(__file__).parent / "www" / "terramaster-card.js"),
                     False,)]
             )
             hass.data[_PATH_KEY] = True
