@@ -4,6 +4,7 @@ Local monitoring of TerraMaster NAS devices from Home Assistant over SSH.
 
 [![Release](https://img.shields.io/github/v/release/minimicro34/ha-terramaster)](https://github.com/minimicro34/ha-terramaster/releases)
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://www.hacs.xyz/)
+[![Coverage](https://img.shields.io/badge/coverage-%E2%89%A580%25-brightgreen)](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml)
 [![Validate](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml/badge.svg)](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%E2%98%95-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/minimicro34)
 [![License](https://img.shields.io/github/license/minimicro34/ha-terramaster)](LICENSE)
@@ -161,13 +162,30 @@ Remove and re-add the integration only after confirming that the NAS address and
 
 ## Development checks
 
+Use a local virtual environment (Python 3.14):
+
 ```sh
-pytest
-mypy custom_components/terramaster
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements_test.txt
 ruff check .
+mypy custom_components/terramaster
+pytest --cov=custom_components.terramaster --cov-report=term-missing --cov-report=xml --cov-fail-under=80
+node --check custom_components/terramaster/www/terramaster-card.js
+node --test tests/js/*.test.cjs
 ```
 
+The Python test suite requires at least **80% coverage** in CI. The XML report is generated locally as `coverage.xml`. JavaScript tests require Node.js 22 and are checked separately; the Python coverage percentage does not include JavaScript.
+
 ## Release history
+
+### 1.1.3 (in development)
+
+Experimental bundled Lovelace NAS dashboard with collapsible detail sections, a secure signed-share-link action, JavaScript tests, and Python coverage enforcement. Not released yet.
+
+### 1.1.2
+
+Replaced persistent share-page tokens with authenticated, short-lived signed links and removed legacy token exposure.
 
 ### 1.1.0
 
@@ -251,4 +269,4 @@ title: My TerraMaster NAS
 # entry_id: your_config_entry_id
 ```
 
-In Lovelace storage mode the bundled JavaScript resource is registered automatically. For YAML-mode Lovelace, add `/terramaster/terramaster-card.js?v=1.1.3` as a JavaScript module resource manually. The browser must allow opening a new tab for the signed shares link. The dashboard is experimental and will be refined based on device testing.
+In Lovelace storage mode the bundled JavaScript resource is registered automatically. For YAML-mode Lovelace, add `/terramaster/terramaster-card.js?v=1.1.3` as a JavaScript module resource manually. The browser must allow opening a new tab for the signed shares link. Detail sections (disks/SMART, RAID, volumes, network, and services) are collapsed by default and retain their expanded state during refreshes. The dashboard is experimental and will be refined based on device testing.
