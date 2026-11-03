@@ -28,8 +28,8 @@ jobs:
       - name: Mypy
         run: mypy custom_components/terramaster
 
-      - name: Pytest
-        run: pytest
+      - name: Pytest with coverage (minimum 80%)
+        run: pytest --cov=custom_components.terramaster --cov-report=term-missing --cov-report=xml --cov-fail-under=80
 
   frontend:
     runs-on: ubuntu-latest
