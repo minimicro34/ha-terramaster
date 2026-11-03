@@ -133,6 +133,6 @@ test('formats NAS uptime and localized disk operating days as durations', () => 
     'sensor.my_nas_disk_sdb_runtime':{state:'3976.29',attributes:{friendly_name:'DISK sdb Durée de fonctionnement',unit_of_measurement:'d'}}
   }};
   assert.match(instance.shadowRoot.innerHTML,/24 j 13 h 55 min/);
-  assert.match(instance.shadowRoot.innerHTML,/3 976 j 6 h 58 min/);
+  assert.match(instance.shadowRoot.innerHTML,/3976 j 6 h 58 min/);
   assert.doesNotMatch(instance.shadowRoot.innerHTML,/24,58 j/);
 });
