@@ -83,3 +83,30 @@ test('invalid signed link is rejected and popup is closed', async () => {
   assert.equal(tab.closed,true);
   assert.match(instance.shadowRoot.getElementById('error').textContent,/invalide/);
 });
+
+test('Sections dashboard uses full-width grid options', () => {
+  const instance=createCard();
+  assert.deepEqual(JSON.parse(JSON.stringify(instance.getGridOptions())),{columns:12,min_columns:6,rows:'auto'});
+});
+
+test('registry discovers French entity IDs using stable unique IDs and isolates NAS entries', async () => {
+  const instance=createCard({entry_id:'nas-one'});
+  const states={
+    'sensor.studio_nas_nico_utilisation_processeur':{state:'23',attributes:{}},
+    'sensor.disk_sdb_etat':{state:'healthy',attributes:{friendly_name:'Disk sdb'}},
+    'sensor.network_eth0_debit_entrant':{state:'12',attributes:{}},
+    'sensor.other_nas_cpu':{state:'99',attributes:{}}
+  };
+  const entries=[
+    {entity_id:'sensor.studio_nas_nico_utilisation_processeur',platform:'terramaster',config_entry_id:'nas-one',unique_id:'nas.local:9222_cpu_usage'},
+    {entity_id:'sensor.disk_sdb_etat',platform:'terramaster',config_entry_id:'nas-one',unique_id:'nas.local:9222_disk_sdb_state'},
+    {entity_id:'sensor.network_eth0_debit_entrant',platform:'terramaster',config_entry_id:'nas-one',unique_id:'nas.local:9222_network_eth0_received_rate'},
+    {entity_id:'sensor.other_nas_cpu',platform:'terramaster',config_entry_id:'nas-two',unique_id:'other_cpu_usage'}
+  ];
+  instance.hass={states,callWS:async req=>req.type==='config/entity_registry/list'?entries:[]};
+  await new Promise(resolve=>setImmediate(resolve));
+  assert.match(instance.shadowRoot.innerHTML,/>23 %</);
+  assert.match(instance.shadowRoot.innerHTML,/Disk sdb/);
+  assert.match(instance.shadowRoot.innerHTML,/Réseau/);
+  assert.doesNotMatch(instance.shadowRoot.innerHTML,/>99 %</);
+});
