@@ -6,7 +6,14 @@ The format is based on Keep a Changelog.
 
 ---
 
-## [Unreleased] - planned 1.1.3
+## [Unreleased]
+
+## [1.1.4] - 2026-11-03
+
+### Fixed
+- Replace deprecated device registry lookup with the config-entry-scoped `async_get_device_by_identifier` API for compatibility with Home Assistant 2027.8.0 and later.
+
+## [1.1.3] - 2026-11-03
 
 ### Added
 - Bundle an experimental Lovelace NAS dashboard with CPU, memory, temperature, storage and system summary tiles.
