@@ -6,7 +6,7 @@ The format is based on Keep a Changelog.
 
 ---
 
-## [1.1.5-beta1] - 2026-11-03
+## [1.1.5] - Unreleased
 
 ### Fixed
 - Discover TerraMaster sensors through the Home Assistant entity registry, including translated entity IDs.
