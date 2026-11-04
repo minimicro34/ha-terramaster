@@ -116,7 +116,7 @@ def _hass() -> Mock:
 
 def _device_registry() -> Mock:
     registry = Mock()
-    registry.async_get_device.return_value = SimpleNamespace(id="device-1")
+    registry.async_get_device_by_identifier.return_value = SimpleNamespace(id="device-1")
     return registry
 
 
@@ -128,10 +128,11 @@ async def test_share_view() -> None:
         headers={"Accept-Language": "fr-FR,fr;q=0.9"},
     )
 
+    registry = _device_registry()
     with (
         patch(
             "custom_components.terramaster.share.dr.async_get",
-            return_value=_device_registry(),
+            return_value=registry,
         ),
         patch(
             "custom_components.terramaster.share.async_sign_path",
@@ -141,6 +142,10 @@ async def test_share_view() -> None:
         response = await TerraMasterShareView(_hass()).get(request)
 
     assert TerraMasterShareView.requires_auth is True
+    registry.async_get_device_by_identifier.assert_called_once_with(
+        (DOMAIN, "nas-1"), "entry-1"
+    )
+    registry.async_get_device.assert_not_called()
     assert response.status == 200
     assert 'href="smb://admin@nas.local/My%20share"' in response.text
     assert 'href="nfs://nas.local/mnt/md0/My%20share"' in response.text
@@ -170,10 +175,11 @@ async def test_share_detail_navigation() -> None:
         headers={"Accept-Language": "fr-FR"},
     )
 
+    registry = _device_registry()
     with (
         patch(
             "custom_components.terramaster.share.dr.async_get",
-            return_value=_device_registry(),
+            return_value=registry,
         ),
         patch(
             "custom_components.terramaster.share.async_sign_path",
@@ -182,6 +188,10 @@ async def test_share_detail_navigation() -> None:
     ):
         response = await TerraMasterShareView(_hass()).get(request)
 
+    registry.async_get_device_by_identifier.assert_called_once_with(
+        (DOMAIN, "nas-1"), "entry-1"
+    )
+    registry.async_get_device.assert_not_called()
     assert response.status == 200
     assert "← Partages TerraMaster" in response.text
     assert (
