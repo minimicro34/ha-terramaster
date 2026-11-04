@@ -3,7 +3,7 @@
 Local monitoring of TerraMaster NAS devices from Home Assistant over SSH.
 
 [![Release](https://img.shields.io/github/v/release/minimicro34/ha-terramaster)](https://github.com/minimicro34/ha-terramaster/releases)
-[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://www.hacs.xyz/)
+[![HACS](https://img.shields.io/badge/HACS-Default-41BDF5.svg)](https://www.hacs.xyz/)
 [![Validate](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml/badge.svg)](https://github.com/minimicro34/ha-terramaster/actions/workflows/validate.yml)
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-%E2%98%95-FFDD00?logo=buymeacoffee&logoColor=000000)](https://buymeacoffee.com/minimicro34)
 [![License](https://img.shields.io/github/license/minimicro34/ha-terramaster)](LICENSE)
@@ -37,14 +37,21 @@ The integration uses read-only commands. The configured password is used for SSH
 
 ## Installation
 
-### HACS custom repository
+### HACS (recommended)
+
+1. Open **HACS** and search for **TerraMaster TOS**.
+2. Install the integration.
+3. Restart Home Assistant.
+
+### HACS custom repository (alternative)
+
+If the integration is not yet visible in the default HACS catalog:
 
 1. Open **HACS**.
 2. Open the menu and choose **Custom repositories**.
 3. Add `https://github.com/minimicro34/ha-terramaster`.
 4. Select **Integration** as the category.
-5. Install **TerraMaster TOS**.
-6. Restart Home Assistant.
+5. Install **TerraMaster TOS** and restart Home Assistant.
 
 ### Manual installation
 
@@ -178,9 +185,13 @@ The Python test suite requires at least **80% coverage** in CI. The XML report i
 
 ## Release history
 
-### 1.1.5 (in development)
+### 1.1.6
 
-Beta testing: localized entity discovery, native Sections grid sizing, and compact numeric readings.
+Fix the remaining deprecated Home Assistant device registry lookup in the shared-folder navigation. Update HACS installation instructions for the default catalog.
+
+### 1.1.5
+
+Improve localized entity discovery, native Sections grid sizing, and compact numeric readings.
 
 ### 1.1.4
 
