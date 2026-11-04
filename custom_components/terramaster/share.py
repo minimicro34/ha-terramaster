@@ -276,8 +276,8 @@ class TerraMasterShareView(HomeAssistantView):
             escape(shares[0].name) if share_name is not None else all_shares_title
         )
         nas_id = entry.unique_id or entry.entry_id
-        device = dr.async_get(self._hass).async_get_device(
-            identifiers={(DOMAIN, nas_id)}
+        device = dr.async_get(self._hass).async_get_device_by_identifier(
+            (DOMAIN, nas_id), entry.entry_id
         )
         nas_url = f"/config/devices/device/{device.id}" if device is not None else "/"
         nas_label = "Retour au NAS" if is_french else "Back to NAS"
