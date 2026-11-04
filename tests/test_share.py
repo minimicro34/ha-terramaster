@@ -116,7 +116,9 @@ def _hass() -> Mock:
 
 def _device_registry() -> Mock:
     registry = Mock()
-    registry.async_get_device_by_identifier.return_value = SimpleNamespace(id="device-1")
+    registry.async_get_device_by_identifier.return_value = SimpleNamespace(
+        id="device-1"
+    )
     return registry
 
 
