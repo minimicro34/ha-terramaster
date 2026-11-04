@@ -6,6 +6,17 @@ The format is based on Keep a Changelog.
 
 ---
 
+## [1.1.6] - 2026-11-04
+
+### Fixed
+- Replace the remaining deprecated `async_get_device()` call in the shared-folder view with config-entry-scoped `async_get_device_by_identifier()` for Home Assistant 2027.8.0 compatibility.
+
+### Changed
+- Lead with default-catalog HACS installation instructions and retain the custom-repository method as an alternative.
+
+### Tests
+- Verify shared-folder navigation uses the config-entry-scoped device lookup and does not call the deprecated API.
+
 ## [1.1.5] - 2026-11-03
 
 ### Fixed
