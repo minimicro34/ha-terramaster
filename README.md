@@ -193,10 +193,18 @@ The Python test suite requires at least **80% coverage** in CI. The XML report i
 
 ## Release history
 
+### 1.2.0
+
+Add TOS 7 support, NVMe monitoring and supported disk lifetime read/write
+counters, with adaptive privileged collection and TOS 4 regression fixes.
+Thanks to [@dkrichun](https://github.com/dkrichun) for the TOS 7 contribution.
+Validated on F2-210 with TOS 4.2.41 using beta2; TOS 7 testing was reported
+for the original contribution, with post-fix retesting pending.
+
 ### 1.2.0-beta2 (Pre-release)
 
 Fix privileged SMART fallback and NAS model collection regressions observed
-on TOS 4.2.41. Hardware retesting is pending.
+on TOS 4.2.41. Hardware retesting succeeded on F2-210.
 
 ### 1.2.0-beta1 (Pre-release)
 
@@ -245,6 +253,13 @@ Contributions are welcome.
 Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes.
 
 For significant changes, please open an issue before submitting a pull request.
+
+## Contributors
+
+Special thanks to [@dkrichun](https://github.com/dkrichun) for TOS 7 support,
+NVMe monitoring and hardware testing reported in [PR #8](https://github.com/minimicro34/ha-terramaster/pull/8).
+
+See the [GitHub contributors](https://github.com/minimicro34/ha-terramaster/graphs/contributors) for project contributions.
 
 ## Support
 
