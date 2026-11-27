@@ -32,6 +32,9 @@ This release introduces TOS 7 support and NVMe disk monitoring. Special thanks t
 - F4-425 running TOS 7.0.1536: hardware testing reported by the contributor for the original TOS 7 changes; post-fix retesting pending.
 - TOS 5/6 and NVMe hardware validation remain pending.
 
+### New Contributors
+- @dkrichun made their first contribution in https://github.com/minimicro34/ha-terramaster/pull/8
+
 ## [1.2.0-beta2] - 2026-11-27
 
 ### Fixed
