@@ -6,6 +6,32 @@ The format is based on Keep a Changelog.
 
 ---
 
+## [1.2.0] - 2026-11-27
+
+This release introduces TOS 7 support and NVMe disk monitoring. Special thanks to [@dkrichun](https://github.com/dkrichun) for the contribution and hardware testing reported in [PR #8](https://github.com/minimicro34/ha-terramaster/pull/8).
+
+### Added
+- TOS 7 support and NVMe disk discovery and SMART monitoring, including health, temperature, power-on hours and power cycles.
+- Per-disk lifetime data read and written sensors for supported SATA and NVMe drives.
+- Additional TOS version file locations, including `/etc/tos/config/login_title.conf` and `/etc/issue`.
+
+### Changed
+- Try direct privileged collection first, with sudo fallback and independent SMART and shared-folder collection modes.
+- Merge partial outputs, preserve version-only output and retry transient SSH failures.
+- Restrict SATA attributes 241/242 to explicitly named LBA counters and convert NVMe data units to gigabytes.
+- Display disk power-on time in days and prefer TOS version information over the underlying Ubuntu version.
+
+### Fixed
+- Preserve SMART permission errors as a sudo fallback signal even when a permissive SCSI query returns a health status.
+- Track missing NAS model collection independently of SMART and shared folders ([PR #9](https://github.com/minimicro34/ha-terramaster/pull/9)).
+
+### Validation
+- Ruff and Mypy passed; all 21 Python tests passed locally with 82.42% coverage.
+- Beta2 GitHub Actions CI passed.
+- F2-210 running TOS 4.2.41: beta2 hardware validation restored all 22 detailed SMART sensors and NAS model across two collection cycles.
+- F4-425 running TOS 7.0.1536: hardware testing reported by the contributor for the original TOS 7 changes; post-fix retesting pending.
+- TOS 5/6 and NVMe hardware validation remain pending.
+
 ## [1.2.0-beta2] - 2026-11-27
 
 ### Fixed
@@ -305,6 +331,7 @@ First stable release of TerraMaster TOS for Home Assistant, providing comprehens
 - Include the NAS username in supported connection URLs.
 - Improve entity organization and diagnostic information.
 
+[1.2.0]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.6...v1.2.0
 [1.2.0-beta2]: https://github.com/minimicro34/ha-terramaster/compare/v1.2.0-beta1...v1.2.0-beta2
 [1.2.0-beta1]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.6...v1.2.0-beta1
 [1.1.6]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.5...v1.1.6
