@@ -53,11 +53,43 @@ The format is based on Keep a Changelog.
 ### Validation
 - Cover translated entity IDs, NAS isolation, native Sections grid options, numeric formatting and durations.
 - Python test coverage: 80.43%.
+- Quality, HACS and Hassfest passed.
+- Dashboard, Sections and Panel layouts, and secure shared-folder navigation validated on F2-210 with TOS 4.2.41.
+
+## [1.1.5-beta2] - 2026-11-03
+
+### Fixed
+- Use native full-width Sections grid options and improve numeric formatting and storage unit conversion.
+
+### Changed
+- Improve dashboard readability and update configuration documentation.
+
+### Validation
+- Python and JavaScript checks passed.
+- Entity discovery and secure shared-folder navigation validated on F2-210 with TOS 4.2.41.
+- Full-width Sections rendering pending at release.
+
+## [1.1.5-beta1] - 2026-11-03
+
+### Fixed
+- Discover localized entities using entity and device registries and stable unique IDs.
+- Isolate NAS configurations and declare a 12-column Sections grid layout.
+
+### Changed
+- Reduce reliance on manually configured entity prefixes while preserving dashboard and secure share functionality.
+
+### Validation
+- Registry discovery, NAS isolation and grid regression tests added.
+- Automated quality and integration checks passed.
+- Real-world dashboard validation pending at release.
 
 ## [1.1.4] - 2026-11-03
 
 ### Fixed
 - Replace deprecated device registry lookup with the config-entry-scoped `async_get_device_by_identifier` API for compatibility with Home Assistant 2027.8.0 and later.
+
+### Validation
+- GitHub Actions CI and existing automated quality and integration checks passed.
 
 ## [1.1.3] - 2026-11-03
 
@@ -74,6 +106,11 @@ The format is based on Keep a Changelog.
 
 ### Fixed
 - Avoid exposing a legacy persistent share-page URL through the NAS device configuration link.
+
+### Validation
+- All 11 Python tests and 4 JavaScript tests passed.
+- Python test coverage: 80.43%.
+- Ruff, Mypy, Hassfest and HACS validation passed.
 
 ## [1.1.2] - 2026-11-02
 
@@ -92,6 +129,20 @@ Security hardening and authenticated share-page access.
 - Document the new manual action workflow for securely accessing the share pages.
 - Retain SMB, NFS, and AFP connection URLs on share sensors.
 
+### Validation
+- Ruff, Mypy, Pytest, Hassfest and HACS validation reported in release notes.
+
+## [1.1.1] - 2026-10-25
+
+### Changed
+- Relax AsyncSSH dependency from `asyncssh==2.24.0` to `asyncssh>=2.24.0`.
+
+### Fixed
+- Resolve Hassfest dependency validation failure and Mypy errors in configuration and reauthentication flows without changing runtime behavior.
+
+### Validation
+- CI, Hassfest and HACS validation passed.
+
 ## [1.1.0] - 2026-09-02
 
 Stable release of the changes tested in `1.1.0-beta1` and `1.1.0-beta2`.
@@ -102,7 +153,6 @@ Stable release of the changes tested in `1.1.0-beta1` and `1.1.0-beta2`.
 - Added system RAID purpose information for TOS and swap arrays.
 - Added direct access to the TerraMaster shares page from the main NAS device.
 - Added navigation between individual share pages, the TerraMaster shares index, and the NAS device page in Home Assistant.
-- Added automated tests covering SMART fallback, system disks, RAID details, synchronization display, and share navigation.
 
 ### Changed
 - Keep SAT SMART collection as preferred mode for normal ATA disks and use permissive SCSI only as fallback.
@@ -116,6 +166,10 @@ Stable release of the changes tested in `1.1.0-beta1` and `1.1.0-beta2`.
 ### Fixed
 - SMART health can be reported for the TerraMaster USB system disk without exposing bogus 0 °C temperature or unsupported ATA counters.
 - TerraMaster system RAID metadata with 24 logical slots no longer implies 24 expected physical disks/degraded hardware in the primary UI.
+
+### Validation
+- Automated tests covering SMART fallback, system disks, RAID details, synchronization display and share navigation added.
+- Tested on TerraMaster F2-210 with TOS 4.2.41 and Home Assistant.
 
 ## [1.1.0-beta2] - 2026-09-02
 
@@ -133,7 +187,6 @@ Stable release of the changes tested in `1.1.0-beta1` and `1.1.0-beta2`.
 - Added RAID member information.
 - Added system RAID purpose information for TOS and swap arrays.
 - Added navigation between individual share pages, the TerraMaster shares index, and Home Assistant.
-- Added automated tests covering SMART fallback, system disks, RAID details, synchronization display, and share navigation.
 
 ### Changed
 - Keep SAT SMART collection as preferred mode for normal ATA disks and use permissive SCSI only as fallback.
@@ -146,6 +199,9 @@ Stable release of the changes tested in `1.1.0-beta1` and `1.1.0-beta2`.
 ### Fixed
 - SMART health can be reported for the TerraMaster USB system disk without exposing bogus 0 °C temperature or unsupported ATA counters.
 - TerraMaster system RAID metadata with 24 logical slots no longer implies 24 expected physical disks/degraded hardware in the primary UI.
+
+### Validation
+- Automated tests covering SMART fallback, system disks, RAID details, synchronization display and share navigation added.
 
 ## [1.0.0] - 2026-08-01
 
