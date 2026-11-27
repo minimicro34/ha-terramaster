@@ -6,6 +6,20 @@ The format is based on Keep a Changelog.
 
 ---
 
+## [1.2.0-beta2] - 2026-11-27
+
+### Fixed
+- Preserve SMART permission errors as a sudo fallback signal even when a permissive SCSI query returns a health status.
+- Track missing NAS model collection independently of SMART and shared folders.
+- Preserve direct-first collection for newer TOS versions and direct-only collection for root.
+
+### Validation
+- Add regression tests for the partial SCSI response and missing model observed on the F2-210 running TOS 4.2.41.
+- Ruff and Mypy passed.
+- All 21 Python tests passed locally; Python test coverage: 82.42%.
+- PR #9 CI passed.
+- TOS 4 and TOS 7 hardware retesting pending.
+
 ## [1.2.0-beta1] - 2026-11-27
 
 This pre-release introduces TOS 7 support and NVMe disk monitoring, contributed by [@dkrichun](https://github.com/dkrichun) in [PR #8](https://github.com/minimicro34/ha-terramaster/pull/8).
@@ -291,6 +305,8 @@ First stable release of TerraMaster TOS for Home Assistant, providing comprehens
 - Include the NAS username in supported connection URLs.
 - Improve entity organization and diagnostic information.
 
+[1.2.0-beta2]: https://github.com/minimicro34/ha-terramaster/compare/v1.2.0-beta1...v1.2.0-beta2
+[1.2.0-beta1]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.6...v1.2.0-beta1
 [1.1.6]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.5...v1.1.6
 [1.1.5]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.4...v1.1.5
 [1.1.5-beta2]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.5-beta1...v1.1.5-beta2
