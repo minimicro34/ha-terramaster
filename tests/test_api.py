@@ -421,3 +421,71 @@ def test_parse_nvme_disk() -> None:
     assert disk.power_cycle_count == 56
     assert disk.total_read == 10000 * 512_000
     assert disk.total_written == 20000 * 512_000
+
+
+async def test_tos4_partial_scsi_and_missing_model() -> None:
+    """A permissive SCSI response must not hide a SATA permission failure."""
+    client = _client()
+    connection = Mock()
+    basic = (
+        "model=\ntos_version=4.2.41\n"
+        "physical_disk=sdb|WDC WD10EFRX-68J||running|1953525168\n"
+    )
+    direct = (
+        "smart_permission_denied=sdb\n"
+        "smart=sdb|SMART Health Status: OK\n"
+        "smart=sdb|Current Drive Temperature:     0 C\n"
+        "smart=sdb|Drive Trip Temperature:        0 C\n"
+        "share=public|/mnt/md0/public|/dev/md0|public|0|1|smb\n"
+    )
+    sudo = (
+        "model=F2-210\n"
+        "smart=sdb|SMART overall-health self-assessment test result: PASSED\n"
+        "smart=sdb|  9 Power_On_Hours 0x0032 001 001 000 Old_age Always - 96002\n"
+        "smart=sdb|194 Temperature_Celsius 0x0022 120 096 000 Old_age Always - 23\n"
+    )
+    connection.run = AsyncMock(
+        side_effect=[
+            SimpleNamespace(exit_status=0, stdout=direct, stderr=""),
+            SimpleNamespace(exit_status=0, stdout=sudo, stderr=""),
+        ]
+    )
+    output = await client._async_collect_optional_data(  # noqa: SLF001
+        connection, basic_output=basic
+    )
+    data = client._parse_output(basic + output)  # noqa: SLF001
+    assert data.model == "F2-210"
+    (disk,) = data.disks
+    assert disk.temperature == 23
+    assert disk.power_on_hours == 96002
+    assert disk.total_read is None
+    assert disk.total_written is None
+    assert connection.run.await_count == 2
+    assert connection.run.await_args.args[0].startswith("sudo -S")
+    assert client._privileged_modes["smart"] == "sudo"  # noqa: SLF001
+    assert client._privileged_modes["model"] == "sudo"  # noqa: SLF001
+
+
+async def test_missing_model_triggers_sudo_even_with_smart_and_shares() -> None:
+    """Model collection is independent of SMART and shares."""
+    client = _client()
+    connection = Mock()
+    connection.run = AsyncMock(
+        side_effect=[
+            SimpleNamespace(
+                exit_status=0,
+                stdout=(
+                    "smart=sdb|SMART Health Status: OK\n"
+                    "share=public|/mnt/md0/public|/dev/md0|public|0|1|smb\n"
+                ),
+                stderr="",
+            ),
+            SimpleNamespace(exit_status=0, stdout="model=F2-210\n", stderr=""),
+        ]
+    )
+    output = await client._async_collect_optional_data(  # noqa: SLF001
+        connection, basic_output="model=\n"
+    )
+    assert "model=F2-210" in output
+    assert connection.run.await_count == 2
+    assert client._privileged_modes["smart"] == "direct"  # noqa: SLF001
