@@ -1,4 +1,4 @@
-"""SSH API client for TerraMaster TOS 4."""
+"""SSH API client for TerraMaster TOS 4/5/6/7."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ import asyncio
 import logging
 import shlex
 import time
-from typing import Any
+from typing import Any, NamedTuple
 
 import asyncssh
 
@@ -30,6 +30,7 @@ from .parsers import (
     MD_HEADER,
     MD_MEMBER,
     MD_STATUS,
+    NVME_METRIC,
     SMART_ATTRIBUTE,
     as_float,
     as_int,
@@ -38,6 +39,46 @@ from .parsers import (
 )
 
 _LOGGER = logging.getLogger(__name__)
+
+# Kinds of privileged data from the optional collection, tracked
+# independently: SMART needs device access, shares need nasdb access,
+# and a single mode (direct or sudo) may provide only one of them.
+_PRIVILEGED_KINDS = ("smart", "share")
+
+# SATA attributes 241/242 are vendor-specific: only counters explicitly
+# named "Total_LBAs_Written/Read" are known to count 512-byte LBAs.
+# Other firmware reuses these attribute IDs for different units.
+_SATA_LBA_COUNTER_NAMES = {241: "total_lbas_written", 242: "total_lbas_read"}
+
+
+class _OptionalRun(NamedTuple):
+    """Result of a single optional collection attempt."""
+
+    output: str | None
+    transient: bool
+
+
+def _sata_lba_count(
+    attributes: dict[int, int], names: dict[int, str], attribute_id: int
+) -> int | None:
+    """Return a raw SATA LBA counter only when its semantics are known."""
+    if names.get(attribute_id, "").casefold() != _SATA_LBA_COUNTER_NAMES[attribute_id]:
+        return None
+    return attributes.get(attribute_id)
+
+
+def _smart_total_bytes(sata_lbas: int | None, nvme_units: int | None) -> int | None:
+    """Convert SMART lifetime counters to bytes.
+
+    SATA attributes 241/242 count 512-byte LBAs (accepted only when the
+    counter name confirms LBA semantics, see `_sata_lba_count`); NVMe
+    "Data Units Read/Written" count units of 512,000 bytes.
+    """
+    if sata_lbas is not None:
+        return sata_lbas * 512
+    if nvme_units is not None:
+        return nvme_units * 512_000
+    return None
 
 
 _COLLECT_COMMAND = r"""
@@ -72,11 +113,20 @@ for file in /usr/www/version /etc/version /etc/TOS_VERSION /etc/tos_version \
     /etc/tos-version /etc/tos-release /etc/TOS_RELEASE \
     /etc/tnas_version /etc/terramaster/version /etc/base/*version* \
     /etc/base/*release* /usr/local/etc/version /usr/www/*version* \
-    /usr/www/include/*version* /usr/www/inc/*version*; do
+    /usr/www/include/*version* /usr/www/inc/*version* \
+    /etc/tos/version /etc/tos/release /etc/tos/*version* /etc/tos/*release* \
+    /etc/tos/config/login_title.conf \
+    /etc/TOS/version /etc/terramaster/release /etc/terramaster/TOS_VERSION \
+    /etc/conf.d/*version* /etc/issue; do
     [ -r "$file" ] || continue
-    tos_version=$(awk \
-        'match($0, /[0-9]+\.[0-9]+\.[0-9]+([-._][0-9]+)?/) \
-        {print substr($0, RSTART, RLENGTH); exit}' "$file" 2>/dev/null)
+    # Prefer a line mentioning TOS so that, e.g., an Ubuntu version string
+    # in /etc/issue is not picked over the TOS version on TOS 7.
+    tos_version=$(awk '
+        /TOS/ && match($0, /[0-9]+\.[0-9]+\.[0-9]+([-._][0-9]+)?/) \
+        {print substr($0, RSTART, RLENGTH); printed=1; exit}
+        !found && match($0, /[0-9]+\.[0-9]+\.[0-9]+([-._][0-9]+)?/) \
+        {candidate=substr($0, RSTART, RLENGTH); found=1}
+        END {if (!printed && found) print candidate}' "$file" 2>/dev/null)
     [ -n "$tos_version" ] && break
 done
 printf 'tos_version=%s\n' "$tos_version"
@@ -169,6 +219,16 @@ for disk_path in /sys/block/sd*; do
     printf 'physical_disk=%s|%s|%s|%s|%s\n' \
         "$disk_name" "$disk_model" "$disk_serial" "$disk_state" "$disk_sectors"
 done
+for disk_path in /sys/block/nvme[0-9]*n[0-9]*; do
+    [ -d "$disk_path" ] || continue
+    disk_name=${disk_path##*/}
+    disk_model=$(cat "$disk_path/device/model" 2>/dev/null)
+    disk_serial=$(cat "$disk_path/device/serial" 2>/dev/null)
+    disk_state=$(cat "$disk_path/device/state" 2>/dev/null)
+    disk_sectors=$(cat "$disk_path/size" 2>/dev/null)
+    printf 'physical_disk=%s|%s|%s|%s|%s\n' \
+        "$disk_name" "$disk_model" "$disk_serial" "$disk_state" "$disk_sectors"
+done
 for net_path in /sys/class/net/*; do
     net_name=${net_path##*/}
     case "$net_name" in lo|docker*|veth*|br-*|tun*|tap*) continue ;; esac
@@ -197,11 +257,20 @@ for file in /usr/www/version /etc/version /etc/TOS_VERSION /etc/tos_version \
     /etc/tos-version /etc/tos-release /etc/TOS_RELEASE \
     /etc/tnas_version /etc/terramaster/version /etc/base/*version* \
     /etc/base/*release* /usr/local/etc/version /usr/www/*version* \
-    /usr/www/include/*version* /usr/www/inc/*version*; do
+    /usr/www/include/*version* /usr/www/inc/*version* \
+    /etc/tos/version /etc/tos/release /etc/tos/*version* /etc/tos/*release* \
+    /etc/tos/config/login_title.conf \
+    /etc/TOS/version /etc/terramaster/release /etc/terramaster/TOS_VERSION \
+    /etc/conf.d/*version* /etc/issue; do
     [ -r "$file" ] || continue
-    tos_version=$(awk \
-        'match($0, /[0-9]+\.[0-9]+\.[0-9]+([-._][0-9]+)?/) \
-        {print substr($0, RSTART, RLENGTH); exit}' "$file" 2>/dev/null)
+    # Prefer a line mentioning TOS so that, e.g., an Ubuntu version string
+    # in /etc/issue is not picked over the TOS version on TOS 7.
+    tos_version=$(awk '
+        /TOS/ && match($0, /[0-9]+\.[0-9]+\.[0-9]+([-._][0-9]+)?/) \
+        {print substr($0, RSTART, RLENGTH); printed=1; exit}
+        !found && match($0, /[0-9]+\.[0-9]+\.[0-9]+([-._][0-9]+)?/) \
+        {candidate=substr($0, RSTART, RLENGTH); found=1}
+        END {if (!printed && found) print candidate}' "$file" 2>/dev/null)
     [ -n "$tos_version" ] && break
 done
 [ -n "$tos_version" ] && printf 'tos_version=%s\n' "$tos_version"
@@ -220,6 +289,21 @@ if command -v smartctl >/dev/null 2>&1; then
             printf '%s\n' "$smart_output" | while IFS= read -r smart_line; do
                 [ -n "$smart_line" ] && printf 'smart=%s|%s\n' \
                     "$disk_name" "$smart_line"
+            done
+        fi
+    done
+    for ns_path in /sys/block/nvme[0-9]*n[0-9]*; do
+        [ -d "$ns_path" ] || continue
+        ns_name=${ns_path##*/}
+        ctrl_name=${ns_name%n[0-9]*}
+        # Query each NVMe controller once, through its first namespace.
+        [ "$ns_name" = "${ctrl_name}n1" ] || continue
+        smart_output=$(smartctl -H -A "/dev/$ctrl_name" 2>&1)
+        if printf '%s\n' "$smart_output" | grep -q \
+            -e 'SMART overall-health' -e 'SMART Health Status:'; then
+            printf '%s\n' "$smart_output" | while IFS= read -r smart_line; do
+                [ -n "$smart_line" ] && printf 'smart=%s|%s\n' \
+                    "$ns_name" "$smart_line"
             done
         fi
     done
@@ -330,7 +414,9 @@ class TerraMasterApiClient:
         self._previous_cpu: tuple[int, int] | None = None
         self._previous_cpu_cores: dict[str, tuple[int, int]] = {}
         self._previous_network: dict[str, tuple[float, int, int]] = {}
-        self._sudo_optional_available: bool | None = None
+        self._privileged_modes: dict[str, str | None] = {
+            kind: None for kind in _PRIVILEGED_KINDS
+        }
         self._clock = time.monotonic
         self._lock = asyncio.Lock()
 
@@ -372,36 +458,109 @@ class TerraMasterApiClient:
     async def _async_collect_optional_data(
         self, connection: asyncssh.SSHClientConnection
     ) -> str:
-        """Collect read-only version and SMART data with administrator access."""
-        if self._sudo_optional_available is False:
+        """Collect read-only version, SMART and shared-folder data.
+
+        A direct run is tried first: on newer TOS versions the shell user
+        can read SMART data directly, while ``sudo`` actually restricts
+        device access. Older TOS versions fall back to ``sudo``. SMART
+        and shared-folder data may be reachable through different modes,
+        so each kind is tracked independently and partial outputs are
+        merged. The working mode per kind is cached for the lifetime of
+        the client; transient SSH failures are not latched and are
+        retried on the next poll.
+        """
+        pending = {
+            kind
+            for kind, mode in self._privileged_modes.items()
+            if mode != "unavailable"
+        }
+        if not pending:
             return ""
 
-        is_root = self._username == "root"
-        command = (
-            _OPTIONAL_COMMAND
-            if is_root
-            else f"sudo -S -p '' sh -c {shlex.quote(_OPTIONAL_COMMAND)}"
-        )
+        if self._username == "root":
+            modes: tuple[str, ...] = ("direct",)
+        else:
+            preferred = [
+                mode
+                for kind in _PRIVILEGED_KINDS
+                if kind in pending
+                and (mode := self._privileged_modes[kind]) is not None
+            ]
+            modes = tuple(dict.fromkeys((*preferred, "direct", "sudo")))
+
+        outputs: list[str] = []
+        transient_failure = False
+        for mode in modes:
+            if not pending:
+                break
+            run = await self._async_run_optional(
+                connection, use_sudo=mode == "sudo"
+            )
+            if run.output is None:
+                transient_failure = transient_failure or run.transient
+                continue
+            # Even a version-only output is kept: the TOS version may be
+            # readable exclusively through this command on some devices.
+            outputs.append(run.output)
+            for kind in tuple(pending):
+                if not self._has_marker(run.output, kind):
+                    continue
+                if self._privileged_modes[kind] not in (None, mode):
+                    _LOGGER.debug(
+                        "TerraMaster %s metrics mode switched to %s", kind, mode
+                    )
+                self._privileged_modes[kind] = mode
+                pending.discard(kind)
+
+        if pending and not transient_failure:
+            for kind in pending:
+                self._privileged_modes[kind] = "unavailable"
+            _LOGGER.debug(
+                "Optional TerraMaster metrics are unavailable "
+                "both directly and through sudo: %s",
+                ", ".join(sorted(pending)),
+            )
+        return "\n".join(outputs)
+
+    async def _async_run_optional(
+        self, connection: asyncssh.SSHClientConnection, *, use_sudo: bool
+    ) -> _OptionalRun:
+        """Run the optional collection command, optionally through sudo."""
+        if use_sudo:
+            command = f"sudo -S -p '' sh -c {shlex.quote(_OPTIONAL_COMMAND)}"
+            run_input: str | None = f"{self._password}\n"
+        else:
+            command = _OPTIONAL_COMMAND
+            run_input = None
         try:
             result = await connection.run(
                 command,
-                input=None if is_root else f"{self._password}\n",
+                input=run_input,
                 check=False,
                 timeout=30,
             )
         except (TimeoutError, asyncssh.Error, OSError) as err:
-            _LOGGER.debug("Optional TerraMaster metrics failed: %s", err)
-            return ""
-        if result.exit_status == 0:
-            self._sudo_optional_available = True
-            return _to_text(result.stdout)
+            _LOGGER.debug(
+                "Optional TerraMaster metrics failed (%s): %s",
+                "sudo" if use_sudo else "direct",
+                err,
+            )
+            return _OptionalRun(output=None, transient=True)
+        if result.exit_status != 0:
+            _LOGGER.debug(
+                "Optional TerraMaster metrics (%s) exited with %s: %s",
+                "sudo" if use_sudo else "direct",
+                result.exit_status,
+                _to_text(result.stderr).strip(),
+            )
+            return _OptionalRun(output=None, transient=False)
+        return _OptionalRun(output=_to_text(result.stdout), transient=False)
 
-        self._sudo_optional_available = False
-        _LOGGER.debug(
-            "Optional privileged TerraMaster metrics are unavailable: %s",
-            _to_text(result.stderr).strip() or result.exit_status,
-        )
-        return ""
+    @staticmethod
+    def _has_marker(output: str, kind: str) -> bool:
+        """Return whether the output contains data of the given kind."""
+        prefix = f"{kind}="
+        return any(line.startswith(prefix) for line in output.splitlines())
 
     async def _async_connect(
         self, *, trust_on_first_use: bool = False
@@ -658,14 +817,37 @@ class TerraMasterApiClient:
             size_bytes = size * 512
             is_system = size_bytes < 10_000_000_000
             attributes: dict[int, int] = {}
+            attribute_names: dict[int, str] = {}
             health: str | None = None
+            nvme_temperature: float | None = None
+            nvme_power_on_hours: int | None = None
+            nvme_power_cycles: int | None = None
+            nvme_data_units_read: int | None = None
+            nvme_data_units_written: int | None = None
             for line in smart.get(name, []):
                 lower = line.lower()
                 if "test result:" in lower or "smart health status:" in lower:
                     health = line.rsplit(":", 1)[-1].strip().lower()
                 match = SMART_ATTRIBUTE.match(line)
                 if match:
-                    attributes[int(match.group(1))] = int(match.group(2))
+                    attribute_id = int(match.group(1))
+                    attribute_names[attribute_id] = match.group(2)
+                    attributes[attribute_id] = int(match.group(3))
+                    continue
+                nvme_match = NVME_METRIC.search(line)
+                if nvme_match is None:
+                    continue
+                number = nvme_match.group(1).replace(",", "")
+                if lower.startswith("temperature:"):
+                    nvme_temperature = float(number)
+                elif lower.startswith("power on hours:"):
+                    nvme_power_on_hours = int(float(number))
+                elif lower.startswith("power cycles:"):
+                    nvme_power_cycles = int(float(number))
+                elif lower.startswith("data units read:"):
+                    nvme_data_units_read = int(float(number))
+                elif lower.startswith("data units written:"):
+                    nvme_data_units_written = int(float(number))
             result.append(
                 TerraMasterDisk(
                     name=name,
@@ -675,9 +857,13 @@ class TerraMasterApiClient:
                     state=state or None,
                     is_system=is_system,
                     smart_status=health,
-                    temperature=(float(attributes[194]) if 194 in attributes else None),
-                    power_on_hours=attributes.get(9),
-                    power_cycle_count=attributes.get(12),
+                    temperature=(
+                        float(attributes[194])
+                        if 194 in attributes
+                        else nvme_temperature
+                    ),
+                    power_on_hours=attributes.get(9, nvme_power_on_hours),
+                    power_cycle_count=attributes.get(12, nvme_power_cycles),
                     start_stop_count=attributes.get(4),
                     load_cycle_count=attributes.get(193),
                     spin_retry_count=attributes.get(10),
@@ -686,6 +872,14 @@ class TerraMasterApiClient:
                     pending_sectors=attributes.get(197),
                     offline_uncorrectable=attributes.get(198),
                     udma_crc_errors=attributes.get(199),
+                    total_read=_smart_total_bytes(
+                        _sata_lba_count(attributes, attribute_names, 242),
+                        nvme_data_units_read,
+                    ),
+                    total_written=_smart_total_bytes(
+                        _sata_lba_count(attributes, attribute_names, 241),
+                        nvme_data_units_written,
+                    ),
                 )
             )
         return tuple(result)

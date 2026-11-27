@@ -27,6 +27,8 @@ class TerraMasterDisk:
     pending_sectors: int | None = None
     offline_uncorrectable: int | None = None
     udma_crc_errors: int | None = None
+    total_read: int | None = None
+    total_written: int | None = None
 
 
 @dataclass(frozen=True, slots=True)

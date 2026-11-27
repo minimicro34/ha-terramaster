@@ -3,6 +3,8 @@
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
+import asyncssh
+
 from custom_components.terramaster.api import TerraMasterApiClient
 
 SAMPLE = """\
@@ -32,6 +34,8 @@ smart=sdb|  5 Reallocated_Sector_Ct   0x0033   200 200 140 Pre-fail Always - 2
 smart=sdb| 12 Power_Cycle_Count       0x0032   100 100 000 Old_age Always - 430
 smart=sdb|194 Temperature_Celsius     0x0022   104 100 000 Old_age Always - 39
 smart=sdb|199 UDMA_CRC_Error_Count    0x0032   200 200 000 Old_age Always - 0
+smart=sdb|241 Total_LBAs_Written      0x0032   100 100 000 Old_age Always - 12345678
+smart=sdb|242 Total_LBAs_Read         0x0032   100 100 000 Old_age Always - 23456789
 mdstat=md0 : active raid1 sdb4[0] sdc4[1]
 mdstat=      971336704 blocks super 1.2 [2/2] [UU]
 raid=md0|raid1|clean|0|idle|none
@@ -94,6 +98,10 @@ def test_parse_output() -> None:
     assert first.disks[1].reallocated_sectors == 2
     assert first.disks[1].power_cycle_count == 430
     assert first.disks[1].udma_crc_errors == 0
+    assert first.disks[0].total_read is None
+    assert first.disks[0].total_written is None
+    assert first.disks[1].total_read == 23456789 * 512
+    assert first.disks[1].total_written == 12345678 * 512
     assert first.raids[0].state == "clean"
     assert first.raids[0].members == ("sdb4", "sdc4")
     assert len(first.volumes) == 1
@@ -157,17 +165,18 @@ def test_parse_missing_values() -> None:
     assert data.disk_usage is None
 
 
-async def test_privileged_metrics_use_password_on_stdin() -> None:
-    """SMART and TOS version collection uses sudo without exposing the password."""
+async def test_privileged_metrics_prefer_direct_run() -> None:
+    """TOS 7: privileged data is collected directly, without sudo."""
     client = _client()
     connection = Mock()
     connection.run = AsyncMock(
         return_value=SimpleNamespace(
             exit_status=0,
             stdout=(
-                "model=F2-210\n"
-                "tos_version=4.2.44-294\n"
+                "model=F4-425\n"
+                "tos_version=7.0.12-345\n"
                 "smart=sdb|SMART overall-health self-assessment test result: PASSED\n"
+                "share=public|/mnt/md0/public|/dev/mapper/vg0-lv0|public|0|1|smb\n"
             ),
             stderr="",
         )
@@ -175,10 +184,240 @@ async def test_privileged_metrics_use_password_on_stdin() -> None:
 
     output = await client._async_collect_optional_data(connection)  # noqa: SLF001
 
+    assert "tos_version=7.0.12-345" in output
+    assert "smart=sdb" in output
+    command = connection.run.await_args.args[0]
+    assert not command.startswith("sudo")
+    assert connection.run.await_args.kwargs["input"] is None
+    assert client._privileged_modes == {"smart": "direct", "share": "direct"}  # noqa: SLF001
+
+
+async def test_privileged_metrics_fall_back_to_sudo() -> None:
+    """TOS 4: without direct access the collection falls back to sudo."""
+    client = _client()
+    connection = Mock()
+    connection.run = AsyncMock(
+        side_effect=[
+            SimpleNamespace(exit_status=0, stdout="model=F2-210\n", stderr=""),
+            SimpleNamespace(
+                exit_status=0,
+                stdout=(
+                    "model=F2-210\n"
+                    "tos_version=4.2.44-294\n"
+                    "smart=sdb|SMART overall-health self-assessment "
+                    "test result: PASSED\n"
+                    "share=public|/mnt/md0/public|/dev/mapper/vg0-lv0"
+                    "|public|0|1|smb\n"
+                ),
+                stderr="",
+            ),
+        ]
+    )
+
+    output = await client._async_collect_optional_data(connection)  # noqa: SLF001
+
     assert "tos_version=4.2.44-294" in output
-    assert "model=F2-210" in output
     assert "smart=sdb" in output
     command = connection.run.await_args.args[0]
     assert command.startswith("sudo -S")
     assert "password" not in command
     assert connection.run.await_args.kwargs["input"] == "password\n"
+    assert client._privileged_modes == {"smart": "sudo", "share": "sudo"}  # noqa: SLF001
+    # The version-only output of the direct run is preserved.
+    assert "model=F2-210" in output
+
+
+async def test_privileged_metrics_partial_collection() -> None:
+    """SMART via direct run and shares via sudo are merged."""
+    client = _client()
+    connection = Mock()
+    connection.run = AsyncMock(
+        side_effect=[
+            SimpleNamespace(
+                exit_status=0,
+                stdout=(
+                    "smart=sdb|SMART overall-health self-assessment "
+                    "test result: PASSED\n"
+                ),
+                stderr="",
+            ),
+            SimpleNamespace(
+                exit_status=0,
+                stdout="share=public|/mnt/md0/public|/dev/mapper/vg0-lv0"
+                "|public|0|1|smb\n",
+                stderr="",
+            ),
+        ]
+    )
+
+    output = await client._async_collect_optional_data(connection)  # noqa: SLF001
+
+    assert "smart=sdb" in output
+    assert "share=public" in output
+    assert client._privileged_modes == {"smart": "direct", "share": "sudo"}  # noqa: SLF001
+
+    # A subsequent poll runs each kind through its working mode only.
+    connection.run = AsyncMock(
+        side_effect=[
+            SimpleNamespace(
+                exit_status=0,
+                stdout="smart=sdb|SMART overall-health self-assessment "
+                "test result: PASSED\n",
+                stderr="",
+            ),
+            SimpleNamespace(
+                exit_status=0,
+                stdout="share=public|/mnt/md0/public|/dev/mapper/vg0-lv0"
+                "|public|0|1|smb\n",
+                stderr="",
+            ),
+        ]
+    )
+    output = await client._async_collect_optional_data(connection)  # noqa: SLF001
+    assert "smart=sdb" in output
+    assert "share=public" in output
+    commands = [call.args[0] for call in connection.run.await_args_list]
+    assert not commands[0].startswith("sudo")
+    assert commands[1].startswith("sudo -S")
+    assert connection.run.await_count == 2
+
+
+async def test_privileged_metrics_version_only_output_kept() -> None:
+    """A run yielding only the TOS version still contributes it."""
+    client = _client()
+    connection = Mock()
+    connection.run = AsyncMock(
+        side_effect=[
+            SimpleNamespace(
+                exit_status=0, stdout="tos_version=4.2.44-294\n", stderr=""
+            ),
+            SimpleNamespace(exit_status=1, stdout="", stderr="denied"),
+        ]
+    )
+
+    output = await client._async_collect_optional_data(connection)  # noqa: SLF001
+
+    assert output.strip() == "tos_version=4.2.44-294"
+    assert client._privileged_modes == {  # noqa: SLF001
+        "smart": "unavailable",
+        "share": "unavailable",
+    }
+
+
+async def test_privileged_metrics_root_runs_direct_only() -> None:
+    """The root user never wraps the optional command in sudo."""
+    client = TerraMasterApiClient("nas.local", 9222, "root", "password")
+    connection = Mock()
+    connection.run = AsyncMock(
+        return_value=SimpleNamespace(
+            exit_status=0,
+            stdout=(
+                "smart=sdb|SMART overall-health self-assessment test result: PASSED\n"
+                "share=public|/mnt/md0/public|/dev/mapper/vg0-lv0|public|0|1|smb\n"
+            ),
+            stderr="",
+        )
+    )
+
+    output = await client._async_collect_optional_data(connection)  # noqa: SLF001
+
+    assert "smart=sdb" in output
+    assert connection.run.await_count == 1
+    command = connection.run.await_args.args[0]
+    assert not command.startswith("sudo")
+    assert connection.run.await_args.kwargs["input"] is None
+
+
+async def test_privileged_metrics_transient_failure_retried() -> None:
+    """A transient SSH failure does not disable optional collection."""
+    client = _client()
+    connection = Mock()
+    connection.run = AsyncMock(side_effect=asyncssh.Error(255, "connection lost"))
+
+    output = await client._async_collect_optional_data(connection)  # noqa: SLF001
+
+    assert output == ""
+    assert client._privileged_modes == {"smart": None, "share": None}  # noqa: SLF001
+
+    connection.run = AsyncMock(
+        return_value=SimpleNamespace(
+            exit_status=0,
+            stdout=(
+                "smart=sdb|SMART overall-health self-assessment test result: PASSED\n"
+                "share=public|/mnt/md0/public|/dev/mapper/vg0-lv0|public|0|1|smb\n"
+            ),
+            stderr="",
+        )
+    )
+    output = await client._async_collect_optional_data(connection)  # noqa: SLF001
+
+    assert "smart=sdb" in output
+    assert client._privileged_modes == {"smart": "direct", "share": "direct"}  # noqa: SLF001
+
+
+async def test_privileged_metrics_unavailable() -> None:
+    """Both direct and sudo failures disable optional collection."""
+    client = _client()
+    connection = Mock()
+    connection.run = AsyncMock(
+        return_value=SimpleNamespace(exit_status=1, stdout="", stderr="denied")
+    )
+
+    output = await client._async_collect_optional_data(connection)  # noqa: SLF001
+
+    assert output == ""
+    assert client._privileged_modes == {  # noqa: SLF001
+        "smart": "unavailable",
+        "share": "unavailable",
+    }
+    # A subsequent poll does not retry.
+    output = await client._async_collect_optional_data(connection)  # noqa: SLF001
+    assert output == ""
+    assert connection.run.await_count == 2
+
+
+def test_parse_sata_lba_counters_require_known_names() -> None:
+    """SATA attributes 241/242 are used only with known LBA semantics."""
+    data = _client()._parse_output(  # noqa: SLF001
+        "physical_disk=sdb|VendorX SSD|SN1|running|1953525168\n"
+        "smart=sdb|SMART overall-health self-assessment test result: PASSED\n"
+        "smart=sdb|241 Host_Writes_32MiB 0x0032 100 100 000 Old_age Always - 5000\n"
+        "smart=sdb|242 Total_LBAs_Read 0x0032 100 100 000 Old_age Always - 23456789\n"
+        "physical_disk=sdc|VendorY SSD|SN2|running|1953525168\n"
+        "smart=sdc|SMART overall-health self-assessment test result: PASSED\n"
+        "smart=sdc|241 Lifetime_Writes_GiB 0x0032 100 100 000 Old_age Always - 7000\n"
+        "smart=sdc|242 Lifetime_Reads_GiB 0x0032 100 100 000 Old_age Always - 9000\n"
+    )
+
+    sdb, sdc = data.disks
+    # 241 with unknown units must not be treated as 512-byte LBAs.
+    assert sdb.total_written is None
+    # 242 with the known "Total_LBAs_Read" name is converted.
+    assert sdb.total_read == 23456789 * 512
+    # Neither counter of the second disk has known LBA semantics.
+    assert sdc.total_read is None
+    assert sdc.total_written is None
+
+
+def test_parse_nvme_disk() -> None:
+    """NVMe SMART metrics are parsed from smartctl text output."""
+    data = _client()._parse_output(  # noqa: SLF001
+        "physical_disk=nvme0n1|KINGSTON SNV2S1000G|ABCD1234|live|1953525168\n"
+        "smart=nvme0n1|SMART overall-health self-assessment test result: PASSED\n"
+        "smart=nvme0n1|Temperature:                        38 Celsius\n"
+        "smart=nvme0n1|Power On Hours:                     1,234\n"
+        "smart=nvme0n1|Power Cycles:                       56\n"
+        "smart=nvme0n1|Data Units Read:                    10,000 [5.12 GB]\n"
+        "smart=nvme0n1|Data Units Written:                 20,000 [10.2 GB]\n"
+    )
+
+    (disk,) = data.disks
+    assert disk.name == "nvme0n1"
+    assert disk.model == "KINGSTON SNV2S1000G"
+    assert disk.serial == "ABCD1234"
+    assert disk.smart_status == "passed"
+    assert disk.temperature == 38.0
+    assert disk.power_on_hours == 1234
+    assert disk.power_cycle_count == 56
+    assert disk.total_read == 10000 * 512_000
+    assert disk.total_written == 20000 * 512_000

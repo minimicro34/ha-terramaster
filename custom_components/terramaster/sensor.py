@@ -727,6 +727,26 @@ DISK_SENSORS: tuple[TerraMasterStorageSensorDescription, ...] = (
             else None
         ),
     ),
+    TerraMasterStorageSensorDescription(
+        key="total_read",
+        translation_key="total_read",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda disk: disk.total_read,
+    ),
+    TerraMasterStorageSensorDescription(
+        key="total_written",
+        translation_key="total_written",
+        device_class=SensorDeviceClass.DATA_SIZE,
+        native_unit_of_measurement=UnitOfInformation.BYTES,
+        suggested_unit_of_measurement=UnitOfInformation.GIGABYTES,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value_fn=lambda disk: disk.total_written,
+    ),
     *tuple(
         TerraMasterStorageSensorDescription(
             key=key,

@@ -63,6 +63,8 @@
       "pending_sectors": {"name": "Secteurs en attente"},
       "offline_uncorrectable": {"name": "Secteurs non corrigeables"},
       "udma_crc_errors": {"name": "Erreurs CRC UDMA"},
+      "total_read": {"name": "Données lues"},
+      "total_written": {"name": "Données écrites"},
       "raid_level": {"name": "Niveau RAID"},
       "degraded_devices": {"name": "Disques dégradés"},
       "sync_action": {"name": "Action de synchronisation"},

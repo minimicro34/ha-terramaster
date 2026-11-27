@@ -63,6 +63,8 @@
       "pending_sectors": {"name": "Pending sectors"},
       "offline_uncorrectable": {"name": "Offline uncorrectable sectors"},
       "udma_crc_errors": {"name": "UDMA CRC errors"},
+      "total_read": {"name": "Total read"},
+      "total_written": {"name": "Total written"},
       "raid_level": {"name": "RAID level"},
       "degraded_devices": {"name": "Degraded devices"},
       "sync_action": {"name": "Synchronization action"},

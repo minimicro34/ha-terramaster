@@ -5,7 +5,8 @@ import re
 MD_HEADER = re.compile(r"^(md\d+)\s*:\s*\w+\s+(\S+)\s+(.+)$")
 MD_STATUS = re.compile(r"\[(\d+)/(\d+)]\s+\[([U_]+)]")
 MD_MEMBER = re.compile(r"\b([a-z]+\d+)\[\d+]")
-SMART_ATTRIBUTE = re.compile(r"^\s*(\d+)\s+\S+.*?\s+(\d+)\s*$")
+SMART_ATTRIBUTE = re.compile(r"^\s*(\d+)\s+(\S+).*?\s+(\d+)\s*$")
+NVME_METRIC = re.compile(r":\s*([0-9][0-9,]*(?:\.[0-9]+)?)")
 
 
 def as_int(value: str | None, *, default: int | None = None) -> int | None:

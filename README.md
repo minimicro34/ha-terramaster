@@ -13,6 +13,7 @@ Local monitoring of TerraMaster NAS devices from Home Assistant over SSH.
 - NAS model, TOS version, Linux distribution and kernel
 - Uptime, last restart, CPU, CPU cores, memory and temperature
 - Physical disks and SMART health information, including system-disk fallback where supported
+- Lifetime read/written totals per disk computed from SMART, with power-on time in days
 - RAID arrays, members, degradation, purpose and synchronization status/progress
 - Volumes, capacity and usage
 - Network interfaces, counters and real-time throughput
@@ -109,6 +110,8 @@ Physical disks expose the storage and SMART information supported by the device.
 
 Normal ATA disks use SAT SMART collection first. Devices that do not expose usable SMART health through SAT can fall back to permissive SCSI health collection. This is used, for example, for the TerraMaster USB system disk when supported by `smartctl`.
 
+Lifetime totals of data read and written are computed from SMART counters — SATA attributes 241/242 (Total LBAs Written/Read) and NVMe Data Units Read/Written — and exposed in gigabytes. Power-on time is reported in days.
+
 System disks intentionally expose only relevant storage information and SMART health; unsupported ATA counters and invalid values such as a reported `0 °C` temperature are not exposed.
 
 ## RAID arrays
@@ -126,7 +129,7 @@ TerraMaster system RAID arrays are identified as TOS system or system swap where
 
 The NAS is the main Home Assistant device. Physical disks, RAID arrays, volumes and network interfaces are represented as child devices where appropriate.
 
-Some metrics require administrator access. When optional privileged collection is unavailable, the basic NAS metrics continue working.
+Some metrics require elevated access. The integration first tries a direct run — on newer TOS versions the shell user can read SMART data directly, while `sudo` may actually restrict device access — and falls back to `sudo` on older TOS versions. When optional privileged collection is unavailable, the basic NAS metrics continue working.
 
 ## Tested hardware
 
@@ -135,7 +138,11 @@ Confirmed during development:
 - TerraMaster F2-210
 - TOS 4.2.41
 
-Other TOS 4, TOS 5 and TOS 6 devices may work, but should be treated as unverified until reported by users.
+Reported by users:
+
+- TerraMaster F4-425 family (F4-425, F4-425 Plus, F4-425 Pro) with TOS 7 (direct SMART collection without `sudo`; NVMe monitoring for the three M.2 slots on the Plus and Pro — the base F4-425 has no M.2 slots)
+
+Other TOS 4, TOS 5, TOS 6 and TOS 7 devices may work, but should be treated as unverified until reported by users.
 
 ## Troubleshooting
 
@@ -149,9 +156,9 @@ sudo sqlite3 -separator '|' /etc/base/nasdb   'SELECT foldername,mntpath,device,
 
 ### SMART data is missing
 
-Verify that `smartctl` is installed on the NAS and that the configured account can execute it through `sudo`.
+Verify that `smartctl` is installed on the NAS and that the configured account can execute it — directly or through `sudo`, whichever works on your TOS version. The integration tries both.
 
-SMART support depends on the disk and bridge presented by the NAS. The integration prefers SAT for normal ATA disks and only uses the permissive SCSI fallback when SAT does not provide a usable SMART health result.
+SMART support depends on the disk and bridge presented by the NAS. The integration prefers SAT for normal ATA disks and only uses the permissive SCSI fallback when SAT does not provide a usable SMART health result. NVMe controllers are queried natively through their first namespace.
 
 ### Authentication or host-key error
 
