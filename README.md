@@ -193,6 +193,11 @@ The Python test suite requires at least **80% coverage** in CI. The XML report i
 
 ## Release history
 
+### 1.2.0-beta2 (Pre-release)
+
+Fix privileged SMART fallback and NAS model collection regressions observed
+on TOS 4.2.41. Hardware retesting is pending.
+
 ### 1.2.0-beta1 (Pre-release)
 
 Experimental TOS 7 support, direct-first privileged collection
