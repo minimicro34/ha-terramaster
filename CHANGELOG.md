@@ -20,6 +20,11 @@ The format is based on Keep a Changelog.
 - Direct-first privileged collection, sudo fallback, unavailable mode and NVMe SMART parsing.
 - Partial privileged collection (SMART direct + shares via sudo), version-only output, root direct-only mode and retry after transient SSH failures.
 - SATA LBA totals accepted only for known counter names, and NVMe data units parsing.
+- Ruff and Mypy passed.
+- JavaScript syntax and card smoke tests passed.
+- HACS and Hassfest validation passed.
+- All 19 Python tests passed; Python test coverage: 82.32%.
+- TOS 7.0.1536 hardware testing reported by the contributor; TOS 4 regression testing pending.
 
 ## [1.1.6] - 2026-11-04
 
@@ -29,8 +34,12 @@ The format is based on Keep a Changelog.
 ### Changed
 - Lead with default-catalog HACS installation instructions and retain the custom-repository method as an alternative.
 
-### Tests
+### Validation
 - Verify shared-folder navigation uses the config-entry-scoped device lookup and does not call the deprecated API.
+- Ruff and Mypy passed.
+- JavaScript syntax and card smoke tests passed.
+- HACS and Hassfest validation passed.
+- All 11 Python tests passed; Python test coverage: 80.43%.
 
 ## [1.1.5] - 2026-11-03
 
@@ -41,8 +50,9 @@ The format is based on Keep a Changelog.
 - Format numeric sensor values to two decimal places and convert large GB readings to TB for a more compact dashboard.
 - Show NAS uptime and disk operating durations in human-readable days, hours and minutes.
 
-### Tests
+### Validation
 - Cover translated entity IDs, NAS isolation, native Sections grid options, numeric formatting and durations.
+- Python test coverage: 80.43%.
 
 ## [1.1.4] - 2026-11-03
 
