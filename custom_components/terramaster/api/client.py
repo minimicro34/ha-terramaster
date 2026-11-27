@@ -280,6 +280,10 @@ if command -v smartctl >/dev/null 2>&1; then
         [ -d "$disk_path" ] || continue
         disk_name=${disk_path##*/}
         smart_output=$(smartctl -H -A -d sat "/dev/$disk_name" 2>&1)
+        if printf '%s\n' "$smart_output" | grep -qi \
+            -e "Operation not permitted" -e "Permission denied"; then
+            printf 'smart_permission_denied=%s\n' "$disk_name"
+        fi
         if ! printf '%s\n' "$smart_output" | grep -q \
             -e 'SMART overall-health' -e 'SMART Health Status:'; then
             smart_output=$(smartctl -H -A -T permissive -d scsi "/dev/$disk_name" 2>&1)
@@ -446,7 +450,9 @@ class TerraMasterApiClient:
                         or f"Command exited with {result.exit_status}"
                     )
                 output = _to_text(result.stdout)
-                optional_output = await self._async_collect_optional_data(connection)
+                optional_output = await self._async_collect_optional_data(
+                    connection, basic_output=output
+                )
             except (TimeoutError, asyncssh.Error, OSError) as err:
                 raise TerraMasterConnectionError(str(err)) from err
             finally:
@@ -456,7 +462,7 @@ class TerraMasterApiClient:
             return self._parse_output("\n".join((output, optional_output)))
 
     async def _async_collect_optional_data(
-        self, connection: asyncssh.SSHClientConnection
+        self, connection: asyncssh.SSHClientConnection, *, basic_output: str = ""
     ) -> str:
         """Collect read-only version, SMART and shared-folder data.
 
@@ -469,6 +475,8 @@ class TerraMasterApiClient:
         the client; transient SSH failures are not latched and are
         retried on the next poll.
         """
+        if basic_output and not self._has_marker(basic_output, "model"):
+            self._privileged_modes.setdefault("model", None)
         pending = {
             kind
             for kind, mode in self._privileged_modes.items()
@@ -482,7 +490,7 @@ class TerraMasterApiClient:
         else:
             preferred = [
                 mode
-                for kind in _PRIVILEGED_KINDS
+                for kind in self._privileged_modes
                 if kind in pending
                 and (mode := self._privileged_modes[kind]) is not None
             ]
@@ -505,6 +513,11 @@ class TerraMasterApiClient:
             for kind in tuple(pending):
                 if not self._has_marker(run.output, kind):
                     continue
+                if kind == "smart" and any(
+                    line.startswith("smart_permission_denied=")
+                    for line in run.output.splitlines()
+                ):
+                    continue
                 if self._privileged_modes[kind] not in (None, mode):
                     _LOGGER.debug(
                         "TerraMaster %s metrics mode switched to %s", kind, mode
@@ -514,7 +527,10 @@ class TerraMasterApiClient:
 
         if pending and not transient_failure:
             for kind in pending:
-                self._privileged_modes[kind] = "unavailable"
+                if any(self._has_marker(output, kind) for output in outputs):
+                    self._privileged_modes[kind] = None
+                else:
+                    self._privileged_modes[kind] = "unavailable"
             _LOGGER.debug(
                 "Optional TerraMaster metrics are unavailable "
                 "both directly and through sudo: %s",
@@ -560,7 +576,10 @@ class TerraMasterApiClient:
     def _has_marker(output: str, kind: str) -> bool:
         """Return whether the output contains data of the given kind."""
         prefix = f"{kind}="
-        return any(line.startswith(prefix) for line in output.splitlines())
+        return any(
+            line.startswith(prefix) and line[len(prefix):].strip()
+            for line in output.splitlines()
+        )
 
     async def _async_connect(
         self, *, trust_on_first_use: bool = False
