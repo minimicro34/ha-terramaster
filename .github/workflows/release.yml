@@ -1,0 +1,278 @@
+name: Signed release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Tag to create (for example v1.3.0-beta1)"
+        required: true
+        type: string
+      prerelease:
+        description: "Publish as a pre-release"
+        required: true
+        type: boolean
+        default: true
+      dry_run:
+        description: "Validate signing without pushing a tag or publishing"
+        required: true
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: signed-release
+  cancel-in-progress: false
+
+jobs:
+  quality:
+    name: Quality checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements_test.txt
+      - name: Run quality checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          make check PYTHON=python 2>&1 | tee "$RUNNER_TEMP/quality.log"
+          python -m coverage json -o coverage.json
+          cp "$RUNNER_TEMP/quality.log" quality.log
+      - name: Preserve test and coverage results
+        uses: actions/upload-artifact@v6
+        with:
+          name: signed-release-quality
+          path: |
+            quality.log
+            coverage.json
+          retention-days: 3
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master
+
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hacs/action@main
+        with:
+          category: integration
+
+  release:
+    name: Sign tag and publish
+    needs: [quality, hassfest, hacs]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.version }}
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+    steps:
+      - name: Check out the exact tested commit
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+
+      - name: Retrieve validated test and coverage results
+        uses: actions/download-artifact@v7
+        with:
+          name: signed-release-quality
+
+      - name: Validate release inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+            echo "::error::Invalid tag format: $RELEASE_TAG"
+            exit 1
+          fi
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Signed releases are restricted to main"
+            exit 1
+          fi
+          if [[ "$RELEASE_TAG" == *-* && "${{ inputs.prerelease }}" != "true" ]] || [[ "$RELEASE_TAG" != *-* && "${{ inputs.prerelease }}" == "true" ]]; then
+            echo "::error::Tag and prerelease flag do not match"
+            exit 1
+          fi
+          manifest_version="$(python -c 'import json; print(json.load(open("custom_components/terramaster/manifest.json", encoding="utf-8"))["version"])')"
+          if [[ "$RELEASE_TAG" != "v$manifest_version" ]]; then
+            echo "::error::Tag $RELEASE_TAG does not match manifest version $manifest_version"
+            exit 1
+          fi
+          if [[ -z "$GPG_PRIVATE_KEY" || -z "$GPG_PASSPHRASE" ]]; then
+            echo "::error::Missing GPG_PRIVATE_KEY or GPG_PASSPHRASE secret"
+            exit 1
+          fi
+          if [[ "${{ inputs.dry_run }}" != "true" ]] && git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null; then
+            echo "::error::Tag already exists: $RELEASE_TAG"
+            exit 1
+          fi
+
+      - name: Import signing key and configure Git
+        shell: bash
+        run: |
+          set -euo pipefail
+          export GNUPGHOME="$RUNNER_TEMP/release-gnupg"
+          mkdir -p "$GNUPGHOME"
+          chmod 700 "$GNUPGHOME"
+          printf '%s\n' "$GPG_PRIVATE_KEY" | gpg --batch --import
+          fingerprint="$(gpg --batch --with-colons --list-secret-keys | awk -F: '$1=="fpr" {print $10; exit}')"
+          if [[ -z "$fingerprint" ]]; then
+            echo "::error::No GPG secret key imported"
+            exit 1
+          fi
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+          git config user.name "GitHub Releases - minimicro34"
+          git config user.email "minimicro34@gmail.com"
+          git config user.signingkey "$fingerprint"
+          git config tag.gpgSign true
+          printf '%s' "$GPG_PASSPHRASE" > "$RUNNER_TEMP/release-passphrase"
+          chmod 600 "$RUNNER_TEMP/release-passphrase"
+          cat > "$RUNNER_TEMP/gpg-sign" <<'SCRIPT'
+          #!/usr/bin/env bash
+          exec gpg --batch --yes --pinentry-mode loopback --passphrase-file "$RUNNER_TEMP/release-passphrase" "$@"
+          SCRIPT
+          chmod 700 "$RUNNER_TEMP/gpg-sign"
+          git config gpg.program "$RUNNER_TEMP/gpg-sign"
+
+      - name: Create and verify signed tag locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="$RELEASE_TAG"
+          if [[ "${{ inputs.dry_run }}" == "true" ]]; then
+            tag="dry-run/$RELEASE_TAG"
+          fi
+          git tag -s "$tag" -m "$RELEASE_TAG"
+          git tag -v "$tag"
+          echo "Signed tag verified locally: $RELEASE_TAG"
+
+      - name: Prepare release notes from changelog and test results
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          version = os.environ["RELEASE_TAG"]
+          changelog = Path("CHANGELOG.md").read_text(encoding="utf-8")
+          section = re.search(
+              rf"(?ms)^## \[\s*{re.escape(version.removeprefix('v'))}\s*\][^\n]*\n(.*?)(?=^---\s*$|^## \[|\Z)",
+              changelog,
+          )
+          if not section:
+              raise SystemExit(f"No changelog entry for {version}")
+          notes = section.group(1).strip() + "\n"
+          reference = re.search(
+              rf"(?m)^\[{re.escape(version.removeprefix('v'))}\]:\s+(https://[^\s]+)\s*$",
+              changelog,
+          )
+          if not reference:
+              raise SystemExit(f"Missing comparison reference for {version}")
+          comparison_url = reference.group(1)
+          notes = re.sub(r"(?m)^\[[^\n]+\]: https://[^\n]+\n?", "", notes)
+          # The workflow owns CI metrics; changelog validation is for manual checks.
+          notes = re.sub(r"(?ms)^### Tests\n.*?(?=^### |\Z)", "", notes)
+          manual_validation = re.search(
+              r"(?ms)^### Validation\n(.*?)(?=^### |\Z)", notes
+          )
+          manual_checks = []
+          if manual_validation:
+              for line in manual_validation.group(1).splitlines():
+                  if not line.strip().startswith("- "):
+                      continue
+                  # Ignore legacy CI metrics so they cannot appear twice.
+                  if re.search(
+                      r"(?i)(\b\d+\s+(?:python|javascript|js)?\s*tests?\s+passed\b|"
+                      r"\bcoverage\s+\d|\bmake check\b|\bquality checks\b|"
+                      r"\bautomated tests\b|\bfrontend tests\b|"
+                      r"\bHACS and Hassfest validation passed\b|"
+                      r"\bRuff and Mypy passed\b|\bIntegration validation\b)",
+                      line,
+                  ):
+                      continue
+                  manual_checks.append(line)
+          notes = re.sub(r"(?ms)^### Validation\n.*?(?=^### |\Z)", "", notes).strip()
+
+          # Remove the original comparison footer; re-add it at the end.
+          notes = "\n".join(
+              line for line in notes.splitlines()
+              if not line.startswith("**Full Changelog:** ")
+          ).strip()
+
+          log = Path("quality.log").read_text(encoding="utf-8")
+          pytest = re.findall(r"(?m)(\d+) passed\b", log)
+          coverage_data = json.loads(Path("coverage.json").read_text(encoding="utf-8"))
+          coverage = coverage_data["totals"]["percent_covered"]
+          js = re.findall(r"(?m)^\s*(?:#|ℹ)\s*pass\s+(\d+)\s*$", log)
+          if not pytest or not isinstance(coverage, (int, float)) or not js:
+              raise SystemExit(f"Unable to extract validated metrics: Python={pytest}, coverage={coverage}, JS={js}. Inspect quality artifacts.")
+
+          validation = [
+              f"- **Automated tests:** {pytest[-1]} Python tests passed with {coverage:.2f}% coverage.",
+              f"- **Frontend tests:** {js[-1]} JavaScript tests passed for the TerraMaster card.",
+              "- **Quality checks:** `make check` passed.",
+              "- **Integration validation:** HACS and Hassfest passed.",
+              *manual_checks,
+          ]
+          validation_section = "### Validation\n\n" + "\n".join(validation)
+          if re.search(r"(?m)^### Contributors\s*$", notes):
+              notes = re.sub(
+                  r"(?m)^### Contributors\s*$",
+                  lambda _: validation_section + "\n\n### Contributors\n",
+                  notes,
+                  count=1,
+              )
+          else:
+              notes += "\n\n" + validation_section
+          comparison_label = comparison_url.rsplit("/", 1)[-1]
+          notes = notes.strip() + f"\n\n**Full Changelog:** [{comparison_label}]({comparison_url})\n"
+          Path("release-notes.md").write_text(notes, encoding="utf-8")
+          PY
+
+      - name: Preserve generated release notes
+        uses: actions/upload-artifact@v6
+        with:
+          name: signed-release-notes
+          path: release-notes.md
+          retention-days: 7
+
+      - name: Publish tag and GitHub release
+        if: inputs.dry_run == false
+        shell: bash
+        env:
+          IS_PRERELEASE: ${{ inputs.prerelease }}
+        run: |
+          set -euo pipefail
+          git push origin "refs/tags/$RELEASE_TAG"
+          args=(--title "$RELEASE_TAG" --notes-file release-notes.md --verify-tag)
+          if [[ "$IS_PRERELEASE" == "true" ]]; then
+            args+=(--prerelease)
+          else
+            args+=(--latest)
+          fi
+          gh release create "$RELEASE_TAG" "${args[@]}"
+
+      - name: Simulation summary
+        if: inputs.dry_run == true
+        run: echo "Dry run succeeded; no tag pushed and no release published." >> "$GITHUB_STEP_SUMMARY"
