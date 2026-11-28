@@ -585,10 +585,17 @@ class TerraMasterApiClient:
         self, *, trust_on_first_use: bool = False
     ) -> asyncssh.SSHClientConnection:
         known_hosts: Any = None
-        if not trust_on_first_use and self._host_key:
-            known_hosts = f"[{self._host}]:{self._port} {self._host_key}\n".encode()
-
         try:
+            if not trust_on_first_use and self._host_key:
+                known_hosts = (
+                    [asyncssh.import_public_key(self._host_key)],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                    [],
+                )
             return await asyncssh.connect(
                 self._host,
                 port=self._port,
@@ -602,7 +609,7 @@ class TerraMasterApiClient:
             )
         except asyncssh.PermissionDenied as err:
             raise TerraMasterAuthenticationError(str(err)) from err
-        except asyncssh.HostKeyNotVerifiable as err:
+        except (asyncssh.HostKeyNotVerifiable, asyncssh.KeyImportError) as err:
             raise TerraMasterHostKeyError(str(err)) from err
         except (TimeoutError, asyncssh.Error, OSError) as err:
             raise TerraMasterConnectionError(str(err)) from err
