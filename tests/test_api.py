@@ -526,38 +526,36 @@ async def test_invalid_pinned_key() -> None:
         await client._async_connect()  # noqa: SLF001
 
 
-@pytest.mark.enable_socket
-@pytest.mark.allow_hosts(["127.0.0.1"])
-async def test_pinned_key_real_connection() -> None:
-    """A real SSH handshake accepts the pinned key and rejects another."""
+@pytest.mark.parametrize("port", [22, 9222])
+async def test_pinned_key_matching(
+    port: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AsyncSSH matches the pinned key without opening a socket."""
     key = asyncssh.generate_private_key("ssh-ed25519")
-    server = await asyncssh.listen(
+    public_key = key.export_public_key().decode().strip()
+    connect = AsyncMock()
+    monkeypatch.setattr(asyncssh, "connect", connect)
+    client = TerraMasterApiClient("nas.local", port, "user", "", public_key)
+    await client._async_connect()  # noqa: SLF001
+
+    trusted, *_ = asyncssh.match_known_hosts(
+        connect.await_args.kwargs["known_hosts"],
+        "nas.local",
         "127.0.0.1",
-        0,
-        server_host_keys=[key],
-        server_factory=lambda: _NoAuthServer(),
+        None if port == 22 else port,
     )
-    try:
-        port = server.get_port()
-        public_key = key.export_public_key().decode().strip()
-        client = TerraMasterApiClient("127.0.0.1", port, "user", "", public_key)
-        connection = await client._async_connect()  # noqa: SLF001
-        connection.close()
-        await connection.wait_closed()
-
-        other_key = asyncssh.generate_private_key("ssh-ed25519")
-        wrong_key = other_key.export_public_key().decode().strip()
-        client = TerraMasterApiClient("127.0.0.1", port, "user", "", wrong_key)
-        with pytest.raises(TerraMasterHostKeyError):
-            await client._async_connect()  # noqa: SLF001
-    finally:
-        server.close()
-        await server.wait_closed()
+    assert asyncssh.import_public_key(public_key) in trusted
+    other = asyncssh.generate_private_key("ssh-ed25519")
+    assert asyncssh.import_public_key(other.export_public_key()) not in trusted
 
 
-class _NoAuthServer(asyncssh.SSHServer):
-    """Local test server requiring no user authentication."""
-
-    def begin_auth(self, username: str) -> bool:
-        """Skip authentication for the local test handshake."""
-        return False
+async def test_untrusted_host_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An SSH host key verification failure remains an authentication error."""
+    connect = AsyncMock(side_effect=asyncssh.HostKeyNotVerifiable("wrong key"))
+    monkeypatch.setattr(asyncssh, "connect", connect)
+    key = asyncssh.generate_private_key("ssh-ed25519")
+    client = TerraMasterApiClient(
+        "nas.local", 22, "user", "", key.export_public_key().decode().strip()
+    )
+    with pytest.raises(TerraMasterHostKeyError):
+        await client._async_connect()  # noqa: SLF001
