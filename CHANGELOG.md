@@ -19,7 +19,12 @@ Special thanks to [@philou669](https://github.com/philou669) for reporting the i
 - Ruff and Mypy passed; all 28 Python tests passed locally and in PR #11 CI with 83.15% coverage.
 - Regression tests cover ports 22 and 9222, key matching, rejection of unexpected or malformed keys and first-use discovery.
 - JavaScript syntax, card smoke tests, HACS and Hassfest validation passed.
-- The reporter confirmed the proposed fix on TOS 7 using port 22; final release hardware retesting is pending.
+- F2-210 running TOS 4.2.41 with SSH port 9222: v1.2.1 hardware validation confirmed 102 available entities out of 106, all 22 detailed SMART sensors operational across successive collection cycles, and no integration errors in Home Assistant logs.
+- The reporter confirmed the proposed fix on TOS 7 using port 22; final release retesting on that environment is pending.
+
+### Contributors
+
+- @philou669 made their first contribution by identifying the issue, proposing a fix and validating it on TOS 7 in https://github.com/minimicro34/ha-terramaster/issues/10
 
 ## [1.2.0] - 2026-11-27
 
@@ -47,7 +52,8 @@ This release introduces TOS 7 support and NVMe disk monitoring. Special thanks t
 - F4-425 running TOS 7.0.1536: hardware testing reported by the contributor for the original TOS 7 changes; post-fix retesting pending.
 - TOS 5/6 and NVMe hardware validation remain pending.
 
-### New Contributors
+### Contributors
+
 - @dkrichun made their first contribution in https://github.com/minimicro34/ha-terramaster/pull/8
 
 ## [1.2.0-beta2] - 2026-11-27
