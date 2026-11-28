@@ -526,6 +526,8 @@ async def test_invalid_pinned_key() -> None:
         await client._async_connect()  # noqa: SLF001
 
 
+@pytest.mark.enable_socket
+@pytest.mark.allow_hosts(["127.0.0.1"])
 async def test_pinned_key_real_connection() -> None:
     """A real SSH handshake accepts the pinned key and rejects another."""
     key = asyncssh.generate_private_key("ssh-ed25519")
