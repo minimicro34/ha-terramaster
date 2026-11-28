@@ -193,6 +193,10 @@ The Python test suite requires at least **80% coverage** in CI. The XML report i
 
 ## Release history
 
+### 1.2.1
+
+Fix SSH host key verification on the default port (22) while preserving pinned-key validation on custom ports. Thanks to [@philou669](https://github.com/philou669) for the diagnosis and hardware testing reported in [issue #10](https://github.com/minimicro34/ha-terramaster/issues/10).
+
 ### 1.2.0
 
 Add TOS 7 support, NVMe monitoring and supported disk lifetime read/write
