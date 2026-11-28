@@ -246,7 +246,7 @@ jobs:
           else:
               notes += "\n\n" + validation_section
           comparison_label = comparison_url.rsplit("/", 1)[-1]
-          notes = notes.strip() + f"\n\n**Full Changelog:** [{comparison_label}]({comparison_url})\n"
+          notes = notes.strip() + f"\n\n---\n\n**Full Changelog:** [{comparison_label}]({comparison_url})\n"
           Path("release-notes.md").write_text(notes, encoding="utf-8")
           PY
 
