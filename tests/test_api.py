@@ -4,8 +4,10 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 
 import asyncssh
+import pytest
 
 from custom_components.terramaster.api import TerraMasterApiClient
+from custom_components.terramaster.api.exceptions import TerraMasterHostKeyError
 
 SAMPLE = """\
 hostname=tnas
@@ -489,3 +491,71 @@ async def test_missing_model_triggers_sudo_even_with_smart_and_shares() -> None:
     assert "model=F2-210" in output
     assert connection.run.await_count == 2
     assert client._privileged_modes["smart"] == "direct"  # noqa: SLF001
+
+
+@pytest.mark.parametrize("port", [22, 9222])
+async def test_pinned_host_key(port: int, monkeypatch: pytest.MonkeyPatch) -> None:
+    """A pinned public key is trusted independently of the SSH port."""
+    key = asyncssh.generate_private_key("ssh-ed25519")
+    public_key = key.export_public_key().decode().strip()
+    connect = AsyncMock()
+    monkeypatch.setattr(asyncssh, "connect", connect)
+    client = TerraMasterApiClient("nas.local", port, "user", "password", public_key)
+
+    await client._async_connect()  # noqa: SLF001
+
+    kwargs = connect.await_args.kwargs
+    assert kwargs["port"] == port
+    assert kwargs["known_hosts"] == (
+        [asyncssh.import_public_key(public_key)], [], [], [], [], [], []
+    )
+
+
+async def test_host_key_first_use(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Initial discovery can retrieve the server key."""
+    connect = AsyncMock()
+    monkeypatch.setattr(asyncssh, "connect", connect)
+    await _client()._async_connect(trust_on_first_use=True)  # noqa: SLF001
+    assert connect.await_args.kwargs["known_hosts"] is None
+
+
+async def test_invalid_pinned_key() -> None:
+    """Malformed stored keys fail closed."""
+    client = TerraMasterApiClient("nas.local", 22, "user", "password", "invalid")
+    with pytest.raises(TerraMasterHostKeyError):
+        await client._async_connect()  # noqa: SLF001
+
+
+@pytest.mark.parametrize("port", [22, 9222])
+async def test_pinned_key_matching(
+    port: int, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """AsyncSSH matches the pinned key without opening a socket."""
+    key = asyncssh.generate_private_key("ssh-ed25519")
+    public_key = key.export_public_key().decode().strip()
+    connect = AsyncMock()
+    monkeypatch.setattr(asyncssh, "connect", connect)
+    client = TerraMasterApiClient("nas.local", port, "user", "", public_key)
+    await client._async_connect()  # noqa: SLF001
+
+    trusted, *_ = asyncssh.match_known_hosts(
+        connect.await_args.kwargs["known_hosts"],
+        "nas.local",
+        "127.0.0.1",
+        None if port == 22 else port,
+    )
+    assert asyncssh.import_public_key(public_key) in trusted
+    other = asyncssh.generate_private_key("ssh-ed25519")
+    assert asyncssh.import_public_key(other.export_public_key()) not in trusted
+
+
+async def test_untrusted_host_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """An SSH host key verification failure remains an authentication error."""
+    connect = AsyncMock(side_effect=asyncssh.HostKeyNotVerifiable("wrong key"))
+    monkeypatch.setattr(asyncssh, "connect", connect)
+    key = asyncssh.generate_private_key("ssh-ed25519")
+    client = TerraMasterApiClient(
+        "nas.local", 22, "user", "", key.export_public_key().decode().strip()
+    )
+    with pytest.raises(TerraMasterHostKeyError):
+        await client._async_connect()  # noqa: SLF001
