@@ -85,7 +85,7 @@ jobs:
       GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
     steps:
       - name: Check out the exact tested commit
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
           persist-credentials: true
@@ -205,7 +205,9 @@ jobs:
                   if re.search(
                       r"(?i)(\b\d+\s+(?:python|javascript|js)?\s*tests?\s+passed\b|"
                       r"\bcoverage\s+\d|\bmake check\b|\bquality checks\b|"
-                      r"\bautomated tests\b|\bfrontend tests\b)",
+                      r"\bautomated tests\b|\bfrontend tests\b|"
+                      r"\bHACS and Hassfest validation passed\b|"
+                      r"\bRuff and Mypy passed\b|\bIntegration validation\b)",
                       line,
                   ):
                       continue
