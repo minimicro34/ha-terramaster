@@ -6,6 +6,21 @@ The format is based on Keep a Changelog.
 
 ---
 
+## [1.2.1] - 2026-11-28
+
+### Fixed
+- Fix SSH host key verification on port 22 by trusting the stored public key directly, independently of the configured SSH port ([issue #10](https://github.com/minimicro34/ha-terramaster/issues/10), [PR #11](https://github.com/minimicro34/ha-terramaster/pull/11)).
+- Handle malformed stored SSH host keys through the existing host key error path.
+- Preserve first-use discovery and compatibility with existing pinned keys.
+
+Special thanks to [@philou669](https://github.com/philou669) for reporting the issue, identifying its cause and testing the proposed fix on a F7-424 Pro running TOS 7.0.1536.
+
+### Validation
+- Ruff and Mypy passed; all 28 Python tests passed locally and in PR #11 CI with 83.15% coverage.
+- Regression tests cover ports 22 and 9222, key matching, rejection of unexpected or malformed keys and first-use discovery.
+- JavaScript syntax, card smoke tests, HACS and Hassfest validation passed.
+- The reporter confirmed the proposed fix on TOS 7 using port 22; final release hardware retesting is pending.
+
 ## [1.2.0] - 2026-11-27
 
 This release introduces TOS 7 support and NVMe disk monitoring. Special thanks to [@dkrichun](https://github.com/dkrichun) for the contribution and hardware testing reported in [PR #8](https://github.com/minimicro34/ha-terramaster/pull/8).
@@ -334,6 +349,7 @@ First stable release of TerraMaster TOS for Home Assistant, providing comprehens
 - Include the NAS username in supported connection URLs.
 - Improve entity organization and diagnostic information.
 
+[1.2.1]: https://github.com/minimicro34/ha-terramaster/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.6...v1.2.0
 [1.2.0-beta2]: https://github.com/minimicro34/ha-terramaster/compare/v1.2.0-beta1...v1.2.0-beta2
 [1.2.0-beta1]: https://github.com/minimicro34/ha-terramaster/compare/v1.1.6...v1.2.0-beta1
